@@ -20,7 +20,7 @@ impl RequestHeadDecoder {
     ) -> RequestHeadDecode<T, R> {
         RequestHeadDecode {
             buffer: Vec::with_capacity(self.max_head_size),
-            transport,
+            transport: Some(transport),
             decoder: self,
             completion: 0,
             p: Default::default(),
@@ -46,14 +46,14 @@ impl Default for RequestHeadDecoder {
 #[pin_project::pin_project]
 pub struct RequestHeadDecode<T: AsyncRead + Unpin, R: BorrowMut<T>> {
     buffer: Vec<u8>,
-    transport: R,
+    transport: Option<R>,
     decoder: RequestHeadDecoder,
     completion: usize,
     p: PhantomData<*const T>,
 }
 
 impl<T: AsyncRead + Unpin, R: BorrowMut<T>> Future for RequestHeadDecode<T, R> {
-    type Output = anyhow::Result<Request<()>>;
+    type Output = anyhow::Result<(R, Request<()>)>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         assert_ne!(self.completion, usize::MAX);
@@ -64,7 +64,8 @@ impl<T: AsyncRead + Unpin, R: BorrowMut<T>> Future for RequestHeadDecode<T, R> {
             if self.buffer.len() + chunk.len() > self.buffer.capacity() {
                 return Poll::Ready(Err(anyhow::Error::msg("request head too long")));
             }
-            match Pin::new(self.transport.borrow_mut()).poll_read(cx, chunk) {
+            let transport = Pin::new(self.transport.as_mut().unwrap().borrow_mut());
+            match transport.poll_read(cx, chunk) {
                 Poll::Ready(Ok(n)) => {
                     let chunk = &chunk[0..n];
                     self.buffer.extend_from_slice(chunk);
@@ -74,10 +75,10 @@ impl<T: AsyncRead + Unpin, R: BorrowMut<T>> Future for RequestHeadDecode<T, R> {
                     }
                     if self.completion == END.len() {
                         self.completion = usize::MAX;
-                        return Poll::Ready(request_head_parse(
-                            &self.buffer,
-                            self.decoder.max_headers,
-                        ));
+                        return Poll::Ready(
+                            request_head_parse(&self.buffer, self.decoder.max_headers)
+                                .map(|request| (self.transport.take().unwrap(), request)),
+                        );
                     }
                 }
                 Poll::Ready(Err(err)) => {
@@ -115,4 +116,53 @@ fn request_head_parse(buffer: &[u8], max_headers: usize) -> anyhow::Result<Reque
         );
     }
     Ok(request)
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::head::decode::RequestHeadDecoder;
+    use futures_lite::future::block_on;
+    use futures_lite::io::Cursor;
+    use futures_lite::{AsyncReadExt, StreamExt};
+    use http::{Method, Request, Version};
+
+    const INPUT: &[u8] = b"GET / HTTP/1.1\r\nHost: www.example.com\r\nConnection: close\r\n\r\n ";
+
+    async fn check(output: Request<()>, transport: Cursor<&[u8]>) {
+        assert_eq!(output.version(), Version::HTTP_11);
+        assert_eq!(output.method(), Method::GET);
+        assert_eq!(
+            output.headers().get("Host").unwrap().as_bytes(),
+            b"www.example.com"
+        );
+        assert_eq!(
+            output.headers().get("Connection").unwrap().as_bytes(),
+            b"close"
+        );
+        assert_eq!(transport.bytes().count().await, 1);
+    }
+
+    #[test]
+    fn owned_transport() {
+        block_on(async {
+            let transport = Cursor::new(INPUT);
+            let (transport, output) = RequestHeadDecoder::default()
+                .decode(transport)
+                .await
+                .unwrap();
+            check(output, transport).await;
+        })
+    }
+
+    #[test]
+    fn referenced_transport() {
+        block_on(async {
+            let mut transport = Cursor::new(INPUT);
+            let (_, output) = RequestHeadDecoder::default()
+                .decode_ref(&mut transport)
+                .await
+                .unwrap();
+            check(output, transport).await;
+        })
+    }
 }

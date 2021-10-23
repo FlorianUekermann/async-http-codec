@@ -18,7 +18,7 @@ impl ResponseHeadEncoder {
         response: Response<()>,
     ) -> ResponseHeadEncode<T, R> {
         ResponseHeadEncode {
-            transport,
+            transport: Some(transport),
             buffer: None,
             _encoder: self,
             completion: 0,
@@ -43,7 +43,7 @@ impl Default for ResponseHeadEncoder {
 
 #[pin_project::pin_project]
 pub struct ResponseHeadEncode<T: AsyncWrite + Unpin, R: BorrowMut<T>> {
-    transport: R,
+    transport: Option<R>,
     _encoder: ResponseHeadEncoder,
     response: Response<()>,
     buffer: Option<Arc<Vec<u8>>>,
@@ -52,7 +52,7 @@ pub struct ResponseHeadEncode<T: AsyncWrite + Unpin, R: BorrowMut<T>> {
 }
 
 impl<T: AsyncWrite + Unpin, R: BorrowMut<T>> Future for ResponseHeadEncode<T, R> {
-    type Output = anyhow::Result<usize>;
+    type Output = anyhow::Result<R>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         assert_ne!(self.completion, usize::MAX);
@@ -68,11 +68,12 @@ impl<T: AsyncWrite + Unpin, R: BorrowMut<T>> Future for ResponseHeadEncode<T, R>
         let buffer = self.buffer.as_ref().unwrap().clone();
         loop {
             let remainder = &buffer[self.completion..];
-            match Pin::new(self.transport.borrow_mut()).poll_write(cx, remainder) {
+            let transport = Pin::new(self.transport.as_mut().unwrap().borrow_mut());
+            match transport.poll_write(cx, remainder) {
                 Poll::Ready(Ok(n)) => {
                     if n == remainder.len() {
                         self.completion = usize::MAX;
-                        return Poll::Ready(Ok(remainder.len() + n));
+                        return Poll::Ready(Ok(self.transport.take().unwrap()));
                     }
                     self.completion += n;
                 }
@@ -98,4 +99,38 @@ fn response_head_encode(response: &Response<()>) -> anyhow::Result<Vec<u8>> {
     }
     writeln!(buffer, "\r")?;
     Ok(buffer)
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::head::encode::ResponseHeadEncoder;
+    use futures_lite::future::block_on;
+    use futures_lite::io::Cursor;
+    use http::Response;
+
+    const OUTPUT: &[u8] = b"HTTP/1.1 200 OK\r\n\r\n";
+
+    #[test]
+    fn owned_transport() {
+        block_on(async {
+            let transport = Cursor::new(Vec::new());
+            let transport = ResponseHeadEncoder::default()
+                .encode(transport, Response::new(()))
+                .await
+                .unwrap();
+            assert_eq!(transport.into_inner(), OUTPUT);
+        })
+    }
+
+    #[test]
+    fn referenced_transport() {
+        block_on(async {
+            let mut transport = Cursor::new(Vec::new());
+            ResponseHeadEncoder::default()
+                .encode_ref(&mut transport, Response::new(()))
+                .await
+                .unwrap();
+            assert_eq!(transport.into_inner(), OUTPUT);
+        })
+    }
 }

@@ -12,12 +12,21 @@ fn main() {
         let request = RequestHeadDecoder::default().decode(reader).await.unwrap();
         dbg!(&request);
 
-        let writer = Cursor::new(Vec::new());
-        ResponseHeadEncoder::default()
-            .encode(writer, Response::new(()))
+        let encoder = ResponseHeadEncoder::default();
+
+        let writer = encoder
+            .encode(Cursor::new(Vec::new()), Response::new(()))
             .await
             .unwrap();
-        // let response = String::from_utf8(writer.into_inner()).unwrap();
-        // dbg!(response);
+        let response = String::from_utf8(writer.into_inner()).unwrap();
+        dbg!(response);
+
+        let mut writer = Cursor::new(Vec::new());
+        encoder
+            .encode_ref(&mut writer, Response::new(()))
+            .await
+            .unwrap();
+        let response = String::from_utf8(writer.into_inner()).unwrap();
+        dbg!(response);
     })
 }
