@@ -2,25 +2,35 @@ use anyhow::bail;
 use futures_lite::prelude::*;
 use http::header::HeaderName;
 use http::{HeaderValue, Method, Request, Uri, Version};
+use std::borrow::BorrowMut;
+use std::marker::PhantomData;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
+#[derive(Copy, Clone, Debug)]
 pub struct RequestHeadDecoder {
     max_head_size: usize,
     max_headers: usize,
 }
 
 impl RequestHeadDecoder {
-    pub fn decode<'a, T: AsyncRead + Unpin>(
-        &'a mut self,
-        transport: &'a mut T,
-    ) -> RequestHeadDecode<'a, T> {
-        RequestHeadDecode::<'a> {
+    pub fn decode<T: AsyncRead + Unpin, R: BorrowMut<T>>(
+        self,
+        transport: R,
+    ) -> RequestHeadDecode<T, R> {
+        RequestHeadDecode {
             buffer: Vec::with_capacity(self.max_head_size),
             transport,
             decoder: self,
             completion: 0,
+            p: Default::default(),
         }
+    }
+    pub fn decode_ref<T: AsyncRead + Unpin>(
+        self,
+        transport: &mut T,
+    ) -> RequestHeadDecode<T, &mut T> {
+        self.decode(transport)
     }
 }
 
@@ -33,14 +43,16 @@ impl Default for RequestHeadDecoder {
     }
 }
 
-pub struct RequestHeadDecode<'a, T: AsyncRead + Unpin> {
+#[pin_project::pin_project]
+pub struct RequestHeadDecode<T: AsyncRead + Unpin, R: BorrowMut<T>> {
     buffer: Vec<u8>,
-    transport: &'a mut T,
-    decoder: &'a mut RequestHeadDecoder,
+    transport: R,
+    decoder: RequestHeadDecoder,
     completion: usize,
+    p: PhantomData<*const T>,
 }
 
-impl<T: AsyncRead + Unpin> Future for RequestHeadDecode<'_, T> {
+impl<T: AsyncRead + Unpin, R: BorrowMut<T>> Future for RequestHeadDecode<T, R> {
     type Output = anyhow::Result<Request<()>>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -52,7 +64,7 @@ impl<T: AsyncRead + Unpin> Future for RequestHeadDecode<'_, T> {
             if self.buffer.len() + chunk.len() > self.buffer.capacity() {
                 return Poll::Ready(Err(anyhow::Error::msg("request head too long")));
             }
-            match Pin::new(&mut self.transport).poll_read(cx, chunk) {
+            match Pin::new(self.transport.borrow_mut()).poll_read(cx, chunk) {
                 Poll::Ready(Ok(n)) => {
                     let chunk = &chunk[0..n];
                     self.buffer.extend_from_slice(chunk);

@@ -1,44 +1,57 @@
 use anyhow::bail;
 use futures_lite::prelude::*;
 use http::Response;
+use std::borrow::BorrowMut;
 use std::io::Write;
+use std::marker::PhantomData;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
-pub struct RequestHeadEncoder {}
+#[derive(Copy, Clone, Debug)]
+pub struct ResponseHeadEncoder {}
 
-impl RequestHeadEncoder {
-    pub fn decode<'a, T: AsyncWrite + Unpin>(
-        &'a mut self,
-        transport: &'a mut T,
+impl ResponseHeadEncoder {
+    pub fn encode<T: AsyncWrite + Unpin, R: BorrowMut<T>>(
+        self,
+        transport: R,
         response: Response<()>,
-    ) -> RequestHeadEncode<'a, T> {
-        RequestHeadEncode::<'a> {
+    ) -> ResponseHeadEncode<T, R> {
+        ResponseHeadEncode {
             transport,
             buffer: None,
             _encoder: self,
             completion: 0,
             response,
+            p: Default::default(),
         }
+    }
+    pub fn encode_ref<T: AsyncWrite + Unpin>(
+        self,
+        transport: &mut T,
+        response: Response<()>,
+    ) -> ResponseHeadEncode<T, &mut T> {
+        self.encode(transport, response)
     }
 }
 
-impl Default for RequestHeadEncoder {
+impl Default for ResponseHeadEncoder {
     fn default() -> Self {
         Self {}
     }
 }
 
-pub struct RequestHeadEncode<'a, T: AsyncWrite + Unpin> {
-    transport: &'a mut T,
-    _encoder: &'a RequestHeadEncoder,
+#[pin_project::pin_project]
+pub struct ResponseHeadEncode<T: AsyncWrite + Unpin, R: BorrowMut<T>> {
+    transport: R,
+    _encoder: ResponseHeadEncoder,
     response: Response<()>,
     buffer: Option<Arc<Vec<u8>>>,
     completion: usize,
+    p: PhantomData<*const T>,
 }
 
-impl<T: AsyncWrite + Unpin> Future for RequestHeadEncode<'_, T> {
+impl<T: AsyncWrite + Unpin, R: BorrowMut<T>> Future for ResponseHeadEncode<T, R> {
     type Output = anyhow::Result<usize>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -55,7 +68,7 @@ impl<T: AsyncWrite + Unpin> Future for RequestHeadEncode<'_, T> {
         let buffer = self.buffer.as_ref().unwrap().clone();
         loop {
             let remainder = &buffer[self.completion..];
-            match Pin::new(&mut self.transport).poll_write(cx, remainder) {
+            match Pin::new(self.transport.borrow_mut()).poll_write(cx, remainder) {
                 Poll::Ready(Ok(n)) => {
                     if n == remainder.len() {
                         self.completion = usize::MAX;
