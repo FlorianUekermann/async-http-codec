@@ -11,3 +11,8 @@ httparse = "1.5.1"
 futures-lite = "1.12.0"
 anyhow = "1.0.44"
 pin-project = "1.0.8"
+log = "0.4.14"
+
+[dev-dependencies]
+async-net-server-utils = { git = "https://github.com/FlorianUekermann/async-net-server-utils" }
+simple_logger = "1.13.0"

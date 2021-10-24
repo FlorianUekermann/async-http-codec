@@ -58,7 +58,7 @@ impl<T: AsyncRead + Unpin, R: BorrowMut<T>> Future for RequestHeadDecode<T, R> {
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         assert_ne!(self.completion, usize::MAX);
         const END: &[u8; 4] = b"\r\n\r\n";
-        let mut chunk = [0u8; 4];
+        let mut chunk = [0u8; END.len()];
         loop {
             let chunk = &mut chunk[self.completion..4];
             if self.buffer.len() + chunk.len() > self.buffer.capacity() {
@@ -67,10 +67,16 @@ impl<T: AsyncRead + Unpin, R: BorrowMut<T>> Future for RequestHeadDecode<T, R> {
             let transport = Pin::new(self.transport.as_mut().unwrap().borrow_mut());
             match transport.poll_read(cx, chunk) {
                 Poll::Ready(Ok(n)) => {
-                    let chunk = &chunk[0..n];
+                    let mut chunk = &chunk[0..n];
                     self.buffer.extend_from_slice(chunk);
-                    match chunk == &END[self.completion..self.completion + n] {
-                        true => self.completion += n,
+                    while self.completion == 0 && chunk.len() > 0 {
+                        if chunk[0] == END[0] {
+                            self.completion = 1
+                        }
+                        chunk = &chunk[1..];
+                    }
+                    match chunk == &END[self.completion..self.completion + chunk.len()] {
+                        true => self.completion += chunk.len(),
                         false => self.completion = 0,
                     }
                     if self.completion == END.len() {
