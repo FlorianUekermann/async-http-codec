@@ -2,8 +2,8 @@
 name = "async-http-codec"
 version = "0.1.0"
 edition = "2018"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+description = "async HTTP 1.1 encoding and decoding"
+license = "Apache-2.0 OR MIT"
 
 [dependencies]
 http = "0.2.5"
