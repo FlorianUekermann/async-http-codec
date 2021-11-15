@@ -17,7 +17,7 @@ fn main() -> anyhow::Result<()> {
         let mut incoming = TcpIncoming::bind((Ipv4Addr::UNSPECIFIED, 8080))?;
         while let Some(mut transport) = incoming.next().await {
             let (_, request) = RequestHeadDecoder::default()
-                .decode_ref(&mut transport)
+                .decode(&mut transport)
                 .await
                 .unwrap();
             log::info!("{:?}", &request);
@@ -27,7 +27,7 @@ fn main() -> anyhow::Result<()> {
                 .body(())
                 .unwrap();
             ResponseHeadEncoder::default()
-                .encode_ref(&mut transport, response)
+                .encode(&mut transport, response)
                 .await
                 .unwrap();
             transport.write_all(b"hello\n").await.unwrap();

@@ -2,8 +2,6 @@ use anyhow::bail;
 use futures_lite::prelude::*;
 use http::header::HeaderName;
 use http::{HeaderValue, Method, Request, Uri, Version};
-use std::borrow::BorrowMut;
-use std::marker::PhantomData;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
@@ -14,23 +12,13 @@ pub struct RequestHeadDecoder {
 }
 
 impl RequestHeadDecoder {
-    pub fn decode<T: AsyncRead + Unpin, R: BorrowMut<T>>(
-        self,
-        transport: R,
-    ) -> RequestHeadDecode<T, R> {
+    pub fn decode<T: AsyncRead + Unpin>(self, transport: T) -> RequestHeadDecode<T> {
         RequestHeadDecode {
             buffer: Vec::with_capacity(self.max_head_size),
             transport: Some(transport),
             decoder: self,
             completion: 0,
-            p: Default::default(),
         }
-    }
-    pub fn decode_ref<T: AsyncRead + Unpin>(
-        self,
-        transport: &mut T,
-    ) -> RequestHeadDecode<T, &mut T> {
-        self.decode(transport)
     }
 }
 
@@ -43,20 +31,18 @@ impl Default for RequestHeadDecoder {
     }
 }
 
-#[pin_project::pin_project]
-pub struct RequestHeadDecode<T: AsyncRead + Unpin, R: BorrowMut<T>> {
+pub struct RequestHeadDecode<T: AsyncRead + Unpin> {
     buffer: Vec<u8>,
-    transport: Option<R>,
+    transport: Option<T>,
     decoder: RequestHeadDecoder,
     completion: usize,
-    p: PhantomData<*const T>,
 }
 
-impl<T: AsyncRead + Unpin, R: BorrowMut<T>> Future for RequestHeadDecode<T, R> {
-    type Output = anyhow::Result<(R, Request<()>)>;
+impl<T: AsyncRead + Unpin> Future for RequestHeadDecode<T> {
+    type Output = anyhow::Result<(T, Request<()>)>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        assert_ne!(self.completion, usize::MAX);
+        let mut transport = self.transport.take().unwrap();
         const END: &[u8; 4] = b"\r\n\r\n";
         let mut chunk = [0u8; END.len()];
         loop {
@@ -64,8 +50,7 @@ impl<T: AsyncRead + Unpin, R: BorrowMut<T>> Future for RequestHeadDecode<T, R> {
             if self.buffer.len() + chunk.len() > self.buffer.capacity() {
                 return Poll::Ready(Err(anyhow::Error::msg("request head too long")));
             }
-            let transport = Pin::new(self.transport.as_mut().unwrap().borrow_mut());
-            match transport.poll_read(cx, chunk) {
+            match Pin::new(&mut transport).poll_read(cx, chunk) {
                 Poll::Ready(Ok(n)) => {
                     let mut chunk = &chunk[0..n];
                     self.buffer.extend_from_slice(chunk);
@@ -80,18 +65,17 @@ impl<T: AsyncRead + Unpin, R: BorrowMut<T>> Future for RequestHeadDecode<T, R> {
                         false => self.completion = 0,
                     }
                     if self.completion == END.len() {
-                        self.completion = usize::MAX;
                         return Poll::Ready(
                             request_head_parse(&self.buffer, self.decoder.max_headers)
-                                .map(|request| (self.transport.take().unwrap(), request)),
+                                .map(|request| (transport, request)),
                         );
                     }
                 }
-                Poll::Ready(Err(err)) => {
-                    self.completion = usize::MAX;
-                    return Poll::Ready(Err(err.into()));
+                Poll::Ready(Err(err)) => return Poll::Ready(Err(err.into())),
+                Poll::Pending => {
+                    self.transport = Some(transport);
+                    return Poll::Pending;
                 }
-                Poll::Pending => return Poll::Pending,
             }
         }
     }
@@ -165,7 +149,7 @@ mod tests {
         block_on(async {
             let mut transport = Cursor::new(INPUT);
             let (_, output) = RequestHeadDecoder::default()
-                .decode_ref(&mut transport)
+                .decode(&mut transport)
                 .await
                 .unwrap();
             check(output, transport).await;
