@@ -1,5 +1,5 @@
-use async_http_codec::head::decode::RequestHeadDecoder;
-use async_http_codec::head::encode::ResponseHeadEncoder;
+use async_http_codec::RequestHeadDecoder;
+use async_http_codec::ResponseHeadEncoder;
 use async_net_server_utils::tcp::TcpIncoming;
 use futures_lite::future::block_on;
 use futures_lite::prelude::*;
@@ -22,12 +22,14 @@ fn main() -> anyhow::Result<()> {
                 .unwrap();
             log::info!("{:?}", &request);
 
-            let response = Response::builder()
+            let response_head = Response::builder()
                 .header("Content-Length", HeaderValue::from(6))
                 .body(())
-                .unwrap();
+                .unwrap()
+                .into_parts()
+                .0;
             ResponseHeadEncoder::default()
-                .encode(&mut transport, response)
+                .encode(&mut transport, response_head)
                 .await
                 .unwrap();
             transport.write_all(b"hello\n").await.unwrap();
