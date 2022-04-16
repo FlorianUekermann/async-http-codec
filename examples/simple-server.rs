@@ -1,12 +1,12 @@
 use async_http_codec::RequestHeadDecoder;
 use async_http_codec::ResponseHeadEncoder;
 use async_net_server_utils::tcp::TcpIncoming;
-use futures_lite::future::block_on;
-use futures_lite::prelude::*;
+use futures::prelude::*;
 use http::{HeaderValue, Response};
 use log::LevelFilter;
 use simple_logger::SimpleLogger;
 use std::net::Ipv4Addr;
+use futures::executor::block_on;
 
 fn main() -> anyhow::Result<()> {
     SimpleLogger::new()

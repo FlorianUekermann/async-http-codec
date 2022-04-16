@@ -6,10 +6,10 @@ pub use encode::*;
 
 #[cfg(test)]
 mod tests {
+    use futures::executor::block_on;
+    use futures::io::Cursor;
     use crate::ResponseHeadDecoder;
     use crate::ResponseHeadEncoder;
-    use futures_lite::future::block_on;
-    use futures_lite::io::Cursor;
     use http::response::Parts;
     use http::{StatusCode, Version};
 

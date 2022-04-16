@@ -1,5 +1,5 @@
 use anyhow::bail;
-use futures_lite::prelude::*;
+use futures::prelude::*;
 use http::response::Parts;
 use std::io::Write;
 use std::pin::Pin;

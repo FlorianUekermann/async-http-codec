@@ -1,6 +1,6 @@
 use crate::BufferHead;
 use anyhow::bail;
-use futures_lite::prelude::*;
+use futures::prelude::*;
 use http::header::HeaderName;
 use http::request::{Builder, Parts};
 use http::{HeaderValue, Method, Uri, Version};

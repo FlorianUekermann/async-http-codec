@@ -1,6 +1,6 @@
 use crate::BufferHead;
 use anyhow::bail;
-use futures_lite::prelude::*;
+use futures::prelude::*;
 use http::header::HeaderName;
 use http::response::{Builder, Parts};
 use http::{HeaderValue, Version};
@@ -79,50 +79,4 @@ fn response_head_parse(buffer: &[u8], max_headers: usize) -> anyhow::Result<Part
         );
     }
     Ok(response.into_parts().0)
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::ResponseHeadDecoder;
-    use futures_lite::future::block_on;
-    use futures_lite::io::Cursor;
-    use futures_lite::{AsyncReadExt, StreamExt};
-    use http::response::Parts;
-    use http::{StatusCode, Version};
-
-    const INPUT: &[u8] = b"HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n ";
-
-    async fn check(output: Parts, transport: Cursor<&[u8]>) {
-        assert_eq!(output.version, Version::HTTP_11);
-        assert_eq!(output.status, StatusCode::OK);
-        assert_eq!(
-            output.headers.get("Connection").unwrap().as_bytes(),
-            b"close"
-        );
-        assert_eq!(transport.bytes().count().await, 1);
-    }
-
-    #[test]
-    fn owned_transport() {
-        block_on(async {
-            let transport = Cursor::new(INPUT);
-            let (transport, output) = ResponseHeadDecoder::default()
-                .decode(transport)
-                .await
-                .unwrap();
-            check(output, transport).await;
-        })
-    }
-
-    #[test]
-    fn referenced_transport() {
-        block_on(async {
-            let mut transport = Cursor::new(INPUT);
-            let (_, output) = ResponseHeadDecoder::default()
-                .decode(&mut transport)
-                .await
-                .unwrap();
-            check(output, transport).await;
-        })
-    }
 }

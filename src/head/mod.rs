@@ -1,7 +1,7 @@
 mod request;
 mod response;
 
-use futures_lite::prelude::*;
+use futures::prelude::*;
 pub use request::*;
 pub use response::*;
 use std::pin::Pin;
