@@ -1,0 +1,26 @@
+<html>
+<head>
+    <script type="text/javascript">
+        function send() {
+            let input = document.getElementById("input");
+            let button = document.getElementById("button");
+            let output = document.getElementById("output");
+            button.disabled = true;
+
+            fetch('/echo', { method: 'POST', body: input.value })
+                .then((response) => {
+                    response.text().then((text) => {
+                        console.log(text);
+                        output.value = text;
+                        button.disabled = false;
+                    });
+                });
+        }
+    </script>
+</head>
+<body>
+    <textarea id="input" cols="80" rows="10">hello</textarea><br />
+    <input type="button" id="button" value="send" onclick="send()"><br>
+    <textarea id="output" cols="80" rows="10" disabled ></textarea>
+</body>
+</html>

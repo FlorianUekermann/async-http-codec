@@ -5,10 +5,10 @@ pub use encode::*;
 
 #[cfg(test)]
 mod tests {
-    use futures::executor::block_on;
-    use futures::io::Cursor;
     use crate::RequestHeadDecoder;
     use crate::RequestHeadEncoder;
+    use futures::executor::block_on;
+    use futures::io::Cursor;
     use http::request::Parts;
     use http::{Method, Version};
 

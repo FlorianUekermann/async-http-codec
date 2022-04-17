@@ -1,6 +1,8 @@
-use anyhow::bail;
+use crate::head::common::header_encode;
 use futures::prelude::*;
 use http::response::Parts;
+use pin_project::pin_project;
+use std::borrow::Borrow;
 use std::io::Write;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -10,13 +12,16 @@ use std::task::{Context, Poll};
 pub struct ResponseHeadEncoder {}
 
 impl ResponseHeadEncoder {
-    pub fn encode<T: AsyncWrite + Unpin>(self, transport: T, head: Parts) -> ResponseHeadEncode<T> {
+    pub fn encode<T: AsyncWrite + Unpin, P: Borrow<Parts>>(
+        self,
+        transport: T,
+        head: P,
+    ) -> ResponseHeadEncode<T, P> {
         ResponseHeadEncode {
-            transport: Some(transport),
+            transport_head: Some((transport, head)),
             buffer: Arc::new(Vec::new()),
             _encoder: self,
             completion: 0,
-            response: head,
         }
     }
 }
@@ -27,38 +32,39 @@ impl Default for ResponseHeadEncoder {
     }
 }
 
-pub struct ResponseHeadEncode<T: AsyncWrite + Unpin> {
-    transport: Option<T>,
+#[pin_project]
+pub struct ResponseHeadEncode<T: AsyncWrite + Unpin, P: Borrow<Parts>> {
+    transport_head: Option<(T, P)>,
     _encoder: ResponseHeadEncoder,
-    response: Parts,
     buffer: Arc<Vec<u8>>,
     completion: usize,
 }
 
-impl<T: AsyncWrite + Unpin> Future for ResponseHeadEncode<T> {
-    type Output = anyhow::Result<T>;
+impl<T: AsyncWrite + Unpin, P: Borrow<Parts>> Future for ResponseHeadEncode<T, P> {
+    type Output = anyhow::Result<(T, P)>;
 
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let mut transport = self.transport.take().unwrap();
-        if self.buffer.is_empty() {
-            match response_head_encode(&self.response) {
-                Ok(buffer) => self.buffer = Arc::new(buffer),
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.project();
+        let (mut transport, head) = this.transport_head.take().unwrap();
+        if this.buffer.is_empty() {
+            match response_head_encode(head.borrow()) {
+                Ok(buffer) => *this.buffer = Arc::new(buffer),
                 Err(err) => return Poll::Ready(Err(err)),
             }
         }
 
         loop {
-            let remainder = &self.buffer[self.completion..];
+            let remainder = &this.buffer[*this.completion..];
             match Pin::new(&mut transport).poll_write(cx, remainder) {
                 Poll::Ready(Ok(n)) => {
                     if n == remainder.len() {
-                        return Poll::Ready(Ok(transport));
+                        return Poll::Ready(Ok((transport, head)));
                     }
-                    self.completion += n;
+                    *this.completion += n;
                 }
                 Poll::Ready(Err(err)) => return Poll::Ready(Err(err.into())),
                 Poll::Pending => {
-                    self.transport = Some(transport);
+                    *this.transport_head = Some((transport, head));
                     return Poll::Pending;
                 }
             }
@@ -69,13 +75,6 @@ impl<T: AsyncWrite + Unpin> Future for ResponseHeadEncode<T> {
 fn response_head_encode(head: &Parts) -> anyhow::Result<Vec<u8>> {
     let mut buffer = Vec::with_capacity(8192);
     writeln!(buffer, "{:?} {}\r", head.version, head.status)?;
-    for (k, v) in &head.headers {
-        let v = match v.to_str() {
-            Err(_) => bail!("invalid character in header value"),
-            Ok(v) => v,
-        };
-        writeln!(buffer, "{}: {}\r", k, v)?;
-    }
-    writeln!(buffer, "\r")?;
+    header_encode(&mut buffer, &head.headers)?;
     Ok(buffer)
 }

@@ -1,5 +1,7 @@
-mod head;
-mod body;
+extern crate core;
 
-pub use head::*;
+mod body;
+mod head;
+
 pub use body::*;
+pub use head::*;
