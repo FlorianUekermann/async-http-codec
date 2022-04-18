@@ -12,6 +12,9 @@ pub struct BodyDecode<IO: AsyncRead + Unpin> {
 }
 
 impl<IO: AsyncRead + Unpin> BodyDecode<IO> {
+    pub fn from_headers(headers: &http::header::HeaderMap, transport: IO) -> anyhow::Result<Self> {
+        Ok(BodyDecodeState::from_headers(headers)?.restore(transport))
+    }
     pub fn new(transport: IO, length: Option<u64>) -> Self {
         BodyDecodeState::new(length).restore(transport)
     }
