@@ -19,6 +19,9 @@ impl<IO: AsyncWrite + Unpin> BodyEncode<IO> {
     pub fn checkpoint(self) -> (IO, BodyEncodeState) {
         (self.transport, self.state)
     }
+    pub fn from_headers(headers: &http::header::HeaderMap, transport: IO) -> anyhow::Result<Self> {
+        Ok(BodyEncodeState::from_headers(headers)?.restore(transport))
+    }
 }
 
 impl<IO: AsyncWrite + Unpin> AsyncWrite for BodyEncode<IO> {
