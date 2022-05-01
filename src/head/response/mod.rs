@@ -13,11 +13,11 @@ mod tests {
     use http::response::Parts;
     use http::{StatusCode, Version};
 
-    const INPUT: &[u8] = b"HTTP/1.1 200 OK\r\nconnection: close\r\n\r\n";
+    const INPUT: &[u8] = b"HTTP/1.1 201 Created\r\nconnection: close\r\n\r\n";
 
     async fn check(output: &Parts) {
         assert_eq!(output.version, Version::HTTP_11);
-        assert_eq!(output.status, StatusCode::OK);
+        assert_eq!(output.status, StatusCode::CREATED);
         assert_eq!(
             output.headers.get("Connection").unwrap().as_bytes(),
             b"close"

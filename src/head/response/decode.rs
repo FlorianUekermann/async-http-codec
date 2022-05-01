@@ -69,7 +69,10 @@ fn response_head_parse(buffer: &[u8], max_headers: usize) -> anyhow::Result<Part
     if parsed_response.version != Some(1) {
         bail!("unsupported HTTP version")
     }
-    let mut response = Builder::new().version(Version::HTTP_11).body(())?;
+    let mut response = Builder::new()
+        .version(Version::HTTP_11)
+        .status(parsed_response.code.unwrap())
+        .body(())?;
     let headers = response.headers_mut();
     headers.reserve(parsed_response.headers.len());
     for header in parsed_response.headers {
