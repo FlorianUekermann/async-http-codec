@@ -1,8 +1,10 @@
 mod decode;
 mod encode;
+mod status_line;
 
 pub use decode::*;
 pub use encode::*;
+pub use status_line::*;
 
 #[cfg(test)]
 mod tests {

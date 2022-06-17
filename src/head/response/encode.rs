@@ -1,4 +1,5 @@
 use crate::head::common::header_encode;
+use crate::util::write_buffer;
 use futures::prelude::*;
 use http::response::Parts;
 use pin_project::pin_project;
@@ -44,7 +45,7 @@ impl<T: AsyncWrite + Unpin, P: Borrow<Parts>> Future for ResponseHeadEncode<T, P
     type Output = anyhow::Result<(T, P)>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let this = self.project();
+        let mut this = self.project();
         let (mut transport, head) = this.transport_head.take().unwrap();
         if this.buffer.is_empty() {
             match response_head_encode(head.borrow()) {
@@ -53,20 +54,12 @@ impl<T: AsyncWrite + Unpin, P: Borrow<Parts>> Future for ResponseHeadEncode<T, P
             }
         }
 
-        loop {
-            let remainder = &this.buffer[*this.completion..];
-            match Pin::new(&mut transport).poll_write(cx, remainder) {
-                Poll::Ready(Ok(n)) => {
-                    if n == remainder.len() {
-                        return Poll::Ready(Ok((transport, head)));
-                    }
-                    *this.completion += n;
-                }
-                Poll::Ready(Err(err)) => return Poll::Ready(Err(err.into())),
-                Poll::Pending => {
-                    *this.transport_head = Some((transport, head));
-                    return Poll::Pending;
-                }
+        match write_buffer(&mut transport, &this.buffer, &mut this.completion, cx) {
+            Poll::Ready(Ok(())) => Poll::Ready(Ok((transport, head))),
+            Poll::Ready(Err(err)) => Poll::Ready(Err(err.into())),
+            Poll::Pending => {
+                *this.transport_head = Some((transport, head));
+                Poll::Pending
             }
         }
     }
