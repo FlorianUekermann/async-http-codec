@@ -3,7 +3,7 @@ pub use encode::*;
 
 #[cfg(test)]
 mod tests {
-    use crate::StatusLineEncoder;
+    use crate::StatusLineEncode;
     use futures::executor::block_on;
     use futures::io::Cursor;
     use http::{StatusCode, Version};
@@ -14,8 +14,7 @@ mod tests {
     fn test() {
         block_on(async {
             let mut transport = Cursor::new(Vec::new());
-            StatusLineEncoder::default()
-                .encode(&mut transport, Version::HTTP_11, StatusCode::CONTINUE)
+            StatusLineEncode::new(&mut transport, Version::HTTP_11, StatusCode::CONTINUE)
                 .await
                 .unwrap();
             assert_eq!(
