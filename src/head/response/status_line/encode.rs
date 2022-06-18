@@ -37,8 +37,9 @@ impl<T: AsyncWrite + Unpin> Future for StatusLineEncode<T> {
         let mut this = self.project();
         let mut transport = this.transport.take().unwrap();
         if this.buffer.is_empty() {
-            match informational_response_encode(this.version, this.code) {
-                Ok(buffer) => *this.buffer = Arc::new(buffer),
+            let mut buffer = Vec::with_capacity(1024);
+            match status_line_encode(&mut buffer, this.version, this.code) {
+                Ok(()) => *this.buffer = Arc::new(buffer),
                 Err(err) => return Poll::Ready(Err(err)),
             }
         }
@@ -53,9 +54,11 @@ impl<T: AsyncWrite + Unpin> Future for StatusLineEncode<T> {
         }
     }
 }
-
-fn informational_response_encode(version: &Version, status: &StatusCode) -> io::Result<Vec<u8>> {
-    let mut buffer = Vec::with_capacity(1024);
+pub(crate) fn status_line_encode(
+    buffer: &mut Vec<u8>,
+    version: &Version,
+    status: &StatusCode,
+) -> io::Result<()> {
     writeln!(buffer, "{:?} {}\r", version, status)?;
-    Ok(buffer)
+    Ok(())
 }
