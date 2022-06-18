@@ -16,6 +16,9 @@ impl<S: IoFutureState<IO>, IO: Unpin> IoFuture<S, IO> {
     pub fn new(state: S, io: IO) -> Self {
         IoFuture(Some((state, io)))
     }
+    pub fn checkpoint(self) -> (S, IO) {
+        self.0.unwrap()
+    }
 }
 
 impl<S: IoFutureState<IO>, IO: Unpin> Future for IoFuture<S, IO> {

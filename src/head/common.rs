@@ -1,5 +1,3 @@
-use anyhow::bail;
-use http::header::ToStrError;
 use http::HeaderMap;
 use std::io;
 use std::io::ErrorKind::InvalidData;

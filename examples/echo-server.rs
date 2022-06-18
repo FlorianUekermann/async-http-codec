@@ -1,10 +1,11 @@
+use async_http_codec::response::head::ResponseHead;
+use async_http_codec::BodyEncodeState;
 use async_http_codec::{BodyDecodeState, RequestHeadDecoder};
-use async_http_codec::{BodyEncodeState, ResponseHeadEncoder};
 use async_net_server_utils::tcp::TcpIncoming;
 use futures::executor::block_on;
 use futures::prelude::*;
 use http::header::{CONNECTION, CONTENT_LENGTH, TRANSFER_ENCODING};
-use http::{HeaderValue, Method, Response, StatusCode};
+use http::{Method, Request, Response, StatusCode};
 use log::LevelFilter;
 use simple_logger::SimpleLogger;
 use std::convert::TryInto;
@@ -35,50 +36,48 @@ async fn handle(mut transport: impl AsyncRead + AsyncWrite + Unpin) -> anyhow::R
         .decode(&mut transport)
         .await
         .unwrap();
-    log::info!("received request head: {:?}", request_head.method);
 
     let mut request_body = String::new();
     BodyDecodeState::from_headers(&request_head.headers)?
         .restore(&mut transport)
         .read_to_string(&mut request_body)
         .await?;
-    log::info!("received request body: {:?}", request_body);
 
-    let mut response_head = Response::new(()).into_parts().0;
-    response_head
-        .headers
+    let request = Request::from_parts(request_head, request_body);
+    log::info!("received request: {:?}", &request);
+
+    let mut response = Response::<&[u8]>::new(&[]);
+    response
+        .headers_mut()
         .insert(CONNECTION, "close".try_into()?);
-    match request_head.method {
-        Method::GET => {
-            response_head
-                .headers
-                .insert(CONTENT_LENGTH, HeaderValue::from(HTML.len()));
+    match (request.method(), request.uri().path()) {
+        (&Method::GET, "/") => {
+            response
+                .headers_mut()
+                .insert(CONTENT_LENGTH, HTML.len().into());
+            *response.body_mut() = HTML;
         }
-        Method::POST => {
-            response_head
-                .headers
+        (&Method::POST, _) => {
+            response
+                .headers_mut()
                 .insert(TRANSFER_ENCODING, "chunked".try_into()?);
+            *response.body_mut() = request.body().as_bytes();
         }
-        _ => {
-            response_head.status = StatusCode::METHOD_NOT_ALLOWED;
-            response_head
-                .headers
-                .insert(CONTENT_LENGTH, HeaderValue::from(0));
-        }
+        (&Method::GET, _) => *response.status_mut() = StatusCode::NOT_FOUND,
+        (_, _) => *response.status_mut() = StatusCode::METHOD_NOT_ALLOWED,
     }
-    ResponseHeadEncoder::default()
-        .encode(&mut transport, &response_head)
-        .await?;
-    log::info!("sent response head: {:?}", &response_head);
 
-    let mut body_encode = BodyEncodeState::from_headers(&response_head.headers)?.restore(transport);
-    match request_head.method {
-        Method::GET => body_encode.write_all(HTML).await?,
-        Method::POST => body_encode.write_all(request_body.as_bytes()).await?,
-        _ => {}
-    }
+    ResponseHead::ref_response(&response)
+        .encode(&mut transport)
+        .await?;
+    let mut body_encode = BodyEncodeState::from_headers(&response.headers())?.restore(transport);
+    body_encode.write_all(response.body()).await?;
     body_encode.close().await?;
-    log::info!("sent response body");
+    log::info!(
+        "sent response with status \"{}\" on \"{}\"",
+        response.status(),
+        request.uri().path()
+    );
 
     Ok(())
 }

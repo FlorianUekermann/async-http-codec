@@ -4,6 +4,8 @@ mod body;
 mod buffer_write;
 mod head;
 mod io_future;
+pub mod request;
+pub mod response;
 mod transaction;
 
 pub use body::*;

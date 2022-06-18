@@ -1,16 +1,17 @@
 use crate::{IoFuture, IoFutureState};
 use futures::AsyncWrite;
 use std::io;
+use std::mem::replace;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-pub(crate) struct BufferWriteState {
-    buffer: Vec<u8>,
+pub struct BufferWriteState {
+    buffer: io::Result<Vec<u8>>,
     completion: usize,
 }
 
 impl BufferWriteState {
-    pub fn new(buffer: Vec<u8>) -> Self {
+    pub fn new(buffer: io::Result<Vec<u8>>) -> Self {
         Self {
             buffer,
             completion: 0,
@@ -20,8 +21,15 @@ impl BufferWriteState {
 
 impl<IO: AsyncWrite + Unpin> IoFutureState<IO> for BufferWriteState {
     fn poll(&mut self, cx: &mut Context<'_>, io: &mut IO) -> Poll<io::Result<()>> {
+        let buffer = match &self.buffer {
+            Ok(buffer) => buffer,
+            Err(_) => {
+                let r = replace(&mut self.buffer, Ok(Vec::new()));
+                return Poll::Ready(Err(r.unwrap_err()));
+            }
+        };
         loop {
-            let remainder = &self.buffer[self.completion..];
+            let remainder = &buffer[self.completion..];
             match Pin::new(&mut *io).poll_write(cx, &remainder) {
                 Poll::Ready(Ok(n)) => {
                     if n == remainder.len() {
@@ -36,7 +44,7 @@ impl<IO: AsyncWrite + Unpin> IoFutureState<IO> for BufferWriteState {
     }
 }
 
-pub(crate) type BufferWrite<IO> = IoFuture<IO, BufferWriteState>;
+pub type BufferWrite<IO> = IoFuture<BufferWriteState, IO>;
 
 #[cfg(test)]
 mod tests {
@@ -50,7 +58,8 @@ mod tests {
         block_on(async {
             const HELLO_WORLD: &[u8] = b"Hello World!";
             let mut io = Cursor::new(Vec::new());
-            let fut = BufferWriteState::new(HELLO_WORLD.to_vec()).into_future(&mut io);
+            let fut: BufferWrite<_> =
+                BufferWriteState::new(Ok(HELLO_WORLD.to_vec())).into_future(&mut io);
             fut.await.unwrap();
 
             assert_eq!(
@@ -61,26 +70,6 @@ mod tests {
     }
 }
 
-// impl<IO: AsyncWrite + Unpin> Future for BufferWrite<IO> {
-//     type Output = io::Result<IO>;
-//     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-//         state_poll(&mut self.0, cx)
-//     }
-//     // fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-//     //     let (mut state, mut io) = self.0.take().unwrap();
-//     //     let p = state.poll(cx, &mut io);
-//     //     self.0 = Some((state, io));
-//     //     p.map(|r| r.map(|()| self.0.take().unwrap().1))
-//     // }
-// }
-//
-// fn state_poll<S: IoFutureState<IO>, IO>(o: &mut Option<(S, IO)>, cx: &mut Context<'_>) -> Poll<io::Result<IO>> {
-//     let (mut state, mut io) = o.take().unwrap();
-//     let p = state.poll(cx, &mut io);
-//     *o = Some((state, io));
-//     p.map(|r| r.map(|()| o.take().unwrap().1))
-// }
-//
 pub(crate) fn write_buffer<IO: AsyncWrite + Unpin>(
     io: &mut IO,
     buffer: &[u8],

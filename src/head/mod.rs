@@ -2,6 +2,7 @@ mod common;
 mod request;
 mod response;
 
+pub(crate) use common::*;
 use futures::prelude::*;
 pub use request::*;
 pub use response::*;
