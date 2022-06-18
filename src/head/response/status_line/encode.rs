@@ -1,4 +1,4 @@
-use crate::util::write_buffer;
+use crate::buffer_write::write_buffer;
 use futures::AsyncWrite;
 use http::{StatusCode, Version};
 use pin_project::pin_project;

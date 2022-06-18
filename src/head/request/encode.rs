@@ -1,5 +1,5 @@
+use crate::buffer_write::write_buffer;
 use crate::head::common::header_encode;
-use crate::util::write_buffer;
 use futures::prelude::*;
 use http::request::Parts;
 use pin_project::pin_project;
