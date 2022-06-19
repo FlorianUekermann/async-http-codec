@@ -1,17 +1,16 @@
 [package]
 name = "async-http-codec"
-version = "0.4.4"
+version = "0.5.0"
 edition = "2021"
 description = "async HTTP 1.1 encoding and decoding"
 license = "Apache-2.0 OR MIT"
 
 [dependencies]
 http = "0.2.5"
-httparse = "1.5.1"
+httparse = "1.7.1"
 futures = "0.3.21"
 anyhow = "1.0.44"
 log = "0.4.14"
-pin-project = "1.0.10"
 
 [dev-dependencies]
 async-net-server-utils = { git = "https://github.com/FlorianUekermann/async-net-server-utils" }

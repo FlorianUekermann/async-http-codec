@@ -1,50 +1,101 @@
-use crate::{length_from_headers, BodyDecode, StatusLineEncode};
+use crate::common::length_from_headers;
+use crate::internal::buffer_write::BufferWriteState;
+use crate::internal::io_future::IoFutureState;
+use crate::{BodyDecodeState, RequestHead, ResponseHead};
 use futures::prelude::*;
 use http::header::EXPECT;
 use http::{HeaderMap, StatusCode, Version};
-use pin_project::pin_project;
+use std::borrow::{BorrowMut, Cow};
 use std::io;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-#[pin_project]
-pub struct BodyDecodeWithContinue<IO: AsyncRead + AsyncWrite + Unpin> {
-    length: Option<u64>,
-    cont: Option<StatusLineEncode<IO>>,
-    body: Option<BodyDecode<IO>>,
+pub struct BodyDecodeWithContinueState {
+    cont: Option<BufferWriteState>,
+    flushed_cont: bool,
+    body: BodyDecodeState,
 }
 
-impl<IO: AsyncRead + AsyncWrite + Unpin> BodyDecodeWithContinue<IO> {
+impl BodyDecodeWithContinueState {
+    pub fn from_head(head: &RequestHead) -> anyhow::Result<Self> {
+        Ok(Self::from_headers(head.headers(), head.version())?)
+    }
+    pub fn new(version: Version, length: Option<u64>, send_continue: bool) -> Self {
+        Self {
+            cont: match send_continue {
+                true => Some(
+                    ResponseHead::new(StatusCode::CONTINUE, version, Cow::Owned(HeaderMap::new()))
+                        .encode_state(),
+                ),
+                false => None,
+            },
+            flushed_cont: false,
+            body: BodyDecodeState::new(length),
+        }
+    }
     pub fn from_headers(
         headers: &http::header::HeaderMap,
         version: Version,
-        transport: IO,
     ) -> anyhow::Result<Self> {
         Ok(Self::new(
-            transport,
             version,
             length_from_headers(headers)?,
             contains_continue(headers),
         ))
     }
-    pub fn new(transport: IO, version: Version, length: Option<u64>, send_continue: bool) -> Self {
-        if send_continue {
-            Self {
-                length,
-                cont: Some(StatusLineEncode::new(
-                    transport,
-                    version,
-                    StatusCode::CONTINUE,
-                )),
-                body: None,
+    pub fn into_async_read<IO: AsyncRead + AsyncWrite + Unpin>(
+        self,
+        io: IO,
+    ) -> BodyDecodeWithContinue<IO> {
+        BodyDecodeWithContinue { io, state: self }
+    }
+    pub fn poll_read<IO: AsyncRead + AsyncWrite + Unpin>(
+        &mut self,
+        cx: &mut Context<'_>,
+        buf: &mut [u8],
+        io: &mut IO,
+    ) -> Poll<io::Result<usize>> {
+        loop {
+            if let Some(cont) = &mut self.cont {
+                match cont.poll(cx, io) {
+                    Poll::Ready(Ok(())) => self.cont.take(),
+                    Poll::Ready(Err(err)) => return Poll::Ready(Err(err)),
+                    Poll::Pending => return Poll::Pending,
+                };
             }
-        } else {
-            Self {
-                length,
-                cont: None,
-                body: Some(BodyDecode::new(transport, length)),
+            if !self.flushed_cont {
+                match Pin::new(&mut *io).poll_flush(cx) {
+                    Poll::Ready(Ok(())) => self.flushed_cont = true,
+                    Poll::Ready(Err(err)) => return Poll::Ready(Err(err)),
+                    Poll::Pending => return Poll::Pending,
+                }
             }
+            return self.body.poll_read(io, cx, buf);
         }
+    }
+}
+
+pub struct BodyDecodeWithContinue<IO: AsyncRead + AsyncWrite + Unpin> {
+    io: IO,
+    state: BodyDecodeWithContinueState,
+}
+
+impl<IO: AsyncRead + AsyncWrite + Unpin> BodyDecodeWithContinue<IO> {
+    pub fn from_head(head: &RequestHead, io: IO) -> anyhow::Result<Self> {
+        Ok(BodyDecodeWithContinueState::from_head(head)?.into_async_read(io))
+    }
+    pub fn from_headers(
+        headers: &http::header::HeaderMap,
+        version: Version,
+        io: IO,
+    ) -> anyhow::Result<Self> {
+        Ok(BodyDecodeWithContinueState::from_headers(headers, version)?.into_async_read(io))
+    }
+    pub fn new(io: IO, version: Version, length: Option<u64>, send_continue: bool) -> Self {
+        BodyDecodeWithContinueState::new(version, length, send_continue).into_async_read(io)
+    }
+    pub fn checkpoint(self) -> (IO, BodyDecodeWithContinueState) {
+        (self.io, self.state)
     }
 }
 
@@ -54,20 +105,8 @@ impl<IO: AsyncRead + AsyncWrite + Unpin> AsyncRead for BodyDecodeWithContinue<IO
         cx: &mut Context<'_>,
         buf: &mut [u8],
     ) -> Poll<io::Result<usize>> {
-        let this = self.project();
-        loop {
-            if let Some(cont) = this.cont {
-                match Pin::new(cont).poll(cx) {
-                    Poll::Ready(Ok(transport)) => {
-                        this.cont.take();
-                        *this.body = Some(BodyDecode::new(transport, *this.length));
-                    }
-                    Poll::Ready(Err(err)) => return Poll::Ready(Err(err)),
-                    Poll::Pending => return Poll::Pending,
-                }
-            }
-            return Pin::new(this.body.as_mut().unwrap()).poll_read(cx, buf);
-        }
+        let this = self.get_mut();
+        this.state.poll_read(cx, buf, this.io.borrow_mut())
     }
 }
 

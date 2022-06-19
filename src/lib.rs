@@ -1,14 +1,12 @@
 extern crate core;
 
 mod body;
-mod buffer_write;
-mod head;
-mod io_future;
-pub mod request;
-pub mod response;
+mod internal;
+mod request;
+mod response;
 mod transaction;
 
 pub use body::*;
-pub use head::*;
-pub use io_future::*;
+pub use request::*;
+pub use response::*;
 pub use transaction::*;

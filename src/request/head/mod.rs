@@ -1,8 +1,12 @@
-mod encode;
+#[cfg(test)]
+mod test;
 
-use crate::buffer_write::{BufferWrite, BufferWriteState};
-use crate::{header_encode, IoFutureState};
-use futures::AsyncWrite;
+use crate::internal::buffer_decode::{BufferDecode, BufferDecodeState};
+use crate::internal::buffer_write::{BufferWrite, BufferWriteState};
+use crate::internal::dec_helpers::request_head_parse;
+use crate::internal::enc_helpers::header_encode;
+use crate::internal::io_future::{IoFutureState, IoFutureWithOutputState};
+use futures::{AsyncRead, AsyncWrite};
 use http::request::Parts;
 use http::{HeaderMap, Method, Request, Uri, Version};
 use std::borrow::Cow;
@@ -53,6 +57,36 @@ impl<'a> RequestHead<'a> {
     }
     pub fn encode_state(&self) -> BufferWriteState {
         BufferWriteState::new(self.to_vec())
+    }
+    pub fn decode<IO: AsyncRead + Unpin>(io: IO) -> BufferDecode<IO, Self> {
+        Self::decode_state().into_future(io)
+    }
+    pub fn decode_state() -> BufferDecodeState<Self> {
+        BufferDecodeState::new(8192, 128, &request_head_parse)
+    }
+    pub fn method(&self) -> Method {
+        self.method.clone()
+    }
+    pub fn uri(&self) -> &Uri {
+        self.uri.as_ref()
+    }
+    pub fn version(&self) -> Version {
+        self.version
+    }
+    pub fn headers(&self) -> &HeaderMap {
+        self.headers.as_ref()
+    }
+    pub fn method_mut(&mut self) -> &mut Method {
+        &mut self.method
+    }
+    pub fn uri_mut(&mut self) -> &mut Uri {
+        self.uri.to_mut()
+    }
+    pub fn version_mut(&mut self) -> &mut Version {
+        &mut self.version
+    }
+    pub fn headers_mut(&mut self) -> &mut HeaderMap {
+        self.headers.to_mut()
     }
 }
 

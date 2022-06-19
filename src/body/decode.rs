@@ -1,11 +1,9 @@
 use crate::body::common::length_from_headers;
 use futures::prelude::*;
-use pin_project::pin_project;
 use std::io;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-#[pin_project]
 pub struct BodyDecode<IO: AsyncRead + Unpin> {
     transport: IO,
     state: BodyDecodeState,
@@ -13,10 +11,10 @@ pub struct BodyDecode<IO: AsyncRead + Unpin> {
 
 impl<IO: AsyncRead + Unpin> BodyDecode<IO> {
     pub fn from_headers(headers: &http::header::HeaderMap, transport: IO) -> anyhow::Result<Self> {
-        Ok(BodyDecodeState::from_headers(headers)?.restore(transport))
+        Ok(BodyDecodeState::from_headers(headers)?.into_async_read(transport))
     }
     pub fn new(transport: IO, length: Option<u64>) -> Self {
-        BodyDecodeState::new(length).restore(transport)
+        BodyDecodeState::new(length).into_async_read(transport)
     }
     pub fn checkpoint(self) -> (IO, BodyDecodeState) {
         (self.transport, self.state)
@@ -29,8 +27,8 @@ impl<IO: AsyncRead + Unpin> AsyncRead for BodyDecode<IO> {
         cx: &mut Context<'_>,
         buf: &mut [u8],
     ) -> Poll<io::Result<usize>> {
-        let this = self.project();
-        this.state.poll_read(this.transport, cx, buf)
+        let this = self.get_mut();
+        this.state.poll_read(&mut this.transport, cx, buf)
     }
 }
 
@@ -79,15 +77,15 @@ impl BodyDecodeState {
             remaining,
         }
     }
-    pub fn restore<IO: AsyncRead + Unpin>(self, transport: IO) -> BodyDecode<IO> {
+    pub fn into_async_read<IO: AsyncRead + Unpin>(self, transport: IO) -> BodyDecode<IO> {
         BodyDecode {
             transport,
             state: self,
         }
     }
-    fn poll_read<IO: AsyncRead + Unpin>(
+    pub fn poll_read<IO: AsyncRead + Unpin>(
         &mut self,
-        mut transport: IO,
+        transport: &mut IO,
         cx: &mut Context<'_>,
         buf: &mut [u8],
     ) -> Poll<io::Result<usize>> {
@@ -104,7 +102,7 @@ impl BodyDecodeState {
                 }
                 Parser::Chunked(chunked_state) => {
                     let mut next = [0u8];
-                    match Pin::new(&mut transport).poll_read(cx, &mut next) {
+                    match Pin::new(&mut *transport).poll_read(cx, &mut next) {
                         Poll::Ready(Err(err)) => {
                             self.parser_state = Parser::Failed;
                             return Poll::Ready(Err(err));
@@ -148,7 +146,7 @@ impl BodyDecodeState {
                     continue;
                 }
             };
-            return match Pin::new(&mut transport).poll_read(cx, &mut buf[0..max_read_size]) {
+            return match Pin::new(&mut *transport).poll_read(cx, &mut buf[0..max_read_size]) {
                 Poll::Ready(Err(err)) => {
                     self.parser_state = Parser::Failed;
                     Poll::Ready(Err(err))

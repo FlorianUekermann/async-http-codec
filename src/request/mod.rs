@@ -1,1 +1,2 @@
-pub mod head;
+mod head;
+pub use head::*;

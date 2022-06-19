@@ -1,6 +1,4 @@
-use async_http_codec::response::head::ResponseHead;
-use async_http_codec::BodyEncodeState;
-use async_http_codec::{BodyDecodeState, RequestHeadDecoder};
+use async_http_codec::{BodyDecodeWithContinue, BodyEncode, RequestHead, ResponseHead};
 use async_net_server_utils::tcp::TcpIncoming;
 use futures::executor::block_on;
 use futures::prelude::*;
@@ -32,18 +30,14 @@ fn main() -> anyhow::Result<()> {
 }
 
 async fn handle(mut transport: impl AsyncRead + AsyncWrite + Unpin) -> anyhow::Result<()> {
-    let (_, request_head) = RequestHeadDecoder::default()
-        .decode(&mut transport)
-        .await
-        .unwrap();
+    let (_, request_head) = RequestHead::decode(&mut transport).await.unwrap();
 
     let mut request_body = String::new();
-    BodyDecodeState::from_headers(&request_head.headers)?
-        .restore(&mut transport)
+    BodyDecodeWithContinue::from_head(&request_head, &mut transport)?
         .read_to_string(&mut request_body)
         .await?;
 
-    let request = Request::from_parts(request_head, request_body);
+    let request = Request::from_parts(request_head.into(), request_body);
     log::info!("received request: {:?}", &request);
 
     let mut response = Response::<&[u8]>::new(&[]);
@@ -70,7 +64,7 @@ async fn handle(mut transport: impl AsyncRead + AsyncWrite + Unpin) -> anyhow::R
     ResponseHead::ref_response(&response)
         .encode(&mut transport)
         .await?;
-    let mut body_encode = BodyEncodeState::from_headers(&response.headers())?.restore(transport);
+    let mut body_encode = BodyEncode::from_headers(&response.headers(), transport)?;
     body_encode.write_all(response.body()).await?;
     body_encode.close().await?;
     log::info!(

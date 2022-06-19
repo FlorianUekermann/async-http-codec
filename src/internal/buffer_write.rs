@@ -1,4 +1,4 @@
-use crate::{IoFuture, IoFutureState};
+use crate::internal::io_future::{IoFuture, IoFutureState};
 use futures::AsyncWrite;
 use std::io;
 use std::mem::replace;
@@ -48,8 +48,8 @@ pub type BufferWrite<IO> = IoFuture<BufferWriteState, IO>;
 
 #[cfg(test)]
 mod tests {
-    use crate::buffer_write::{BufferWrite, BufferWriteState};
-    use crate::IoFutureState;
+    use crate::internal::buffer_write::{BufferWrite, BufferWriteState};
+    use crate::internal::io_future::IoFutureState;
     use futures::executor::block_on;
     use futures::io::Cursor;
 
@@ -67,28 +67,5 @@ mod tests {
                 String::from_utf8(io.into_inner()).unwrap()
             );
         })
-    }
-}
-
-pub(crate) fn write_buffer<IO: AsyncWrite + Unpin>(
-    io: &mut IO,
-    buffer: &[u8],
-    completion: &mut usize,
-    cx: &mut Context<'_>,
-) -> Poll<io::Result<()>> {
-    loop {
-        let remainder = &buffer[*completion..];
-        match Pin::new(&mut *io).poll_write(cx, remainder) {
-            Poll::Ready(Ok(n)) => {
-                if n == remainder.len() {
-                    return Poll::Ready(Ok(()));
-                }
-                *completion += n;
-            }
-            Poll::Ready(Err(err)) => return Poll::Ready(Err(err)),
-            Poll::Pending => {
-                return Poll::Pending;
-            }
-        }
     }
 }

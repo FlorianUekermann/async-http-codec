@@ -1,8 +1,7 @@
-mod common;
+pub mod common;
 mod decode;
 mod encode;
 
-pub(crate) use common::*;
 pub use decode::*;
 pub use encode::*;
 

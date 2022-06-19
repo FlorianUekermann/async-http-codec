@@ -1,12 +1,10 @@
 use crate::body::common::length_from_headers;
 use futures::prelude::*;
-use pin_project::pin_project;
 use std::cmp::min;
 use std::io;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-#[pin_project]
 pub struct BodyEncode<IO: AsyncWrite + Unpin> {
     transport: IO,
     state: BodyEncodeState,
@@ -14,13 +12,13 @@ pub struct BodyEncode<IO: AsyncWrite + Unpin> {
 
 impl<IO: AsyncWrite + Unpin> BodyEncode<IO> {
     pub fn new(transport: IO, length: Option<u64>) -> Self {
-        BodyEncodeState::new(length).restore(transport)
+        BodyEncodeState::new(length).into_async_write(transport)
     }
     pub fn checkpoint(self) -> (IO, BodyEncodeState) {
         (self.transport, self.state)
     }
     pub fn from_headers(headers: &http::header::HeaderMap, transport: IO) -> anyhow::Result<Self> {
-        Ok(BodyEncodeState::from_headers(headers)?.restore(transport))
+        Ok(BodyEncodeState::from_headers(headers)?.into_async_write(transport))
     }
 }
 
@@ -30,18 +28,18 @@ impl<IO: AsyncWrite + Unpin> AsyncWrite for BodyEncode<IO> {
         cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<io::Result<usize>> {
-        let this = self.project();
-        this.state.poll_write(this.transport, cx, buf)
+        let this = self.get_mut();
+        this.state.poll_write(&mut this.transport, cx, buf)
     }
 
     fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        let this = self.project();
-        this.state.poll_flush(this.transport, cx)
+        let this = self.get_mut();
+        this.state.poll_flush(&mut this.transport, cx)
     }
 
     fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        let this = self.project();
-        this.state.poll_close(this.transport, cx)
+        let this = self.get_mut();
+        this.state.poll_close(&mut this.transport, cx)
     }
 }
 
@@ -77,7 +75,7 @@ impl BodyEncodeState {
             },
         }
     }
-    pub fn restore<IO: AsyncWrite + Unpin>(self, transport: IO) -> BodyEncode<IO> {
+    pub fn into_async_write<IO: AsyncWrite + Unpin>(self, transport: IO) -> BodyEncode<IO> {
         BodyEncode {
             transport,
             state: self,
