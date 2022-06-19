@@ -1,4 +1,4 @@
-pub mod common;
+pub(crate) mod common;
 mod decode;
 mod encode;
 

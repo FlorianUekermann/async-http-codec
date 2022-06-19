@@ -1,7 +1,7 @@
 extern crate core;
 
 mod body;
-mod internal;
+pub mod internal;
 mod request;
 mod response;
 mod transaction;
