@@ -10,10 +10,6 @@ pub struct BufferWriteState {
     completion: usize,
 }
 
-#[allow(dead_code)]
-const fn check_if_send<T: Send>() {}
-const _: () = check_if_send::<BufferWriteState>();
-
 impl BufferWriteState {
     pub fn new(buffer: io::Result<Vec<u8>>) -> Self {
         Self {
@@ -49,6 +45,10 @@ impl<IO: AsyncWrite + Unpin> IoFutureState<IO> for BufferWriteState {
 }
 
 pub type BufferWrite<IO> = IoFuture<BufferWriteState, IO>;
+
+#[allow(dead_code)]
+const fn check_if_send<T: Send>() {}
+const _: () = check_if_send::<BufferWrite<Box<dyn AsyncWrite + Send + Unpin>>>();
 
 #[cfg(test)]
 mod tests {

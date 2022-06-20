@@ -40,8 +40,8 @@ pub trait IoFutureWithOutputState<IO: Sized + Unpin, O>: Sized + Unpin {
     }
 }
 
-pub struct IoFutureWithOutput<S: IoFutureWithOutputState<IO, O>, IO: Sized + Unpin, O>(
-    Option<(S, IO, PhantomData<*const O>)>,
+pub struct IoFutureWithOutput<S: IoFutureWithOutputState<IO, O>, IO: Sized + Unpin, O: 'static>(
+    Option<(S, IO, PhantomData<&'static O>)>,
 );
 
 impl<S: IoFutureWithOutputState<IO, O>, IO: Unpin, O> IoFutureWithOutput<S, IO, O> {

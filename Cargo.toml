@@ -1,6 +1,6 @@
 [package]
 name = "async-http-codec"
-version = "0.5.3"
+version = "0.5.4"
 edition = "2021"
 description = "async HTTP 1.1 encoding and decoding"
 license = "Apache-2.0 OR MIT"

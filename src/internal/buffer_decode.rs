@@ -15,10 +15,6 @@ pub struct BufferDecodeState<O: 'static> {
     _phantom: PhantomData<&'static O>,
 }
 
-#[allow(dead_code)]
-const fn check_if_send<T: Send>() {}
-const _: () = check_if_send::<BufferDecodeState<RequestHead>>();
-
 impl<O> BufferDecodeState<O> {
     pub fn new(
         max_buffer: usize,
@@ -71,3 +67,7 @@ impl<IO: AsyncRead + Unpin, O> IoFutureWithOutputState<IO, O> for BufferDecodeSt
 }
 
 pub type BufferDecode<IO, O> = IoFutureWithOutput<BufferDecodeState<O>, IO, O>;
+
+#[allow(dead_code)]
+const fn check_if_send<T: Send>() {}
+const _: () = check_if_send::<BufferDecode<Box<dyn AsyncRead + Send + Unpin>, RequestHead>>();
