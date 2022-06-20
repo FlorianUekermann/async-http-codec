@@ -1,5 +1,5 @@
 use async_http_codec::{BodyDecodeWithContinue, BodyEncode, RequestHead, ResponseHead};
-use async_net_server_utils::tcp::TcpIncoming;
+use async_web_server::TcpIncoming;
 use futures::executor::block_on;
 use futures::prelude::*;
 use http::header::{CONNECTION, CONTENT_LENGTH, TRANSFER_ENCODING};
