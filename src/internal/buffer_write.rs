@@ -10,6 +10,10 @@ pub struct BufferWriteState {
     completion: usize,
 }
 
+#[allow(dead_code)]
+const fn check_if_send<T: Send>() {}
+const _: () = check_if_send::<BufferWriteState>();
+
 impl BufferWriteState {
     pub fn new(buffer: io::Result<Vec<u8>>) -> Self {
         Self {

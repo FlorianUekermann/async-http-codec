@@ -1,4 +1,5 @@
 use crate::internal::io_future::{IoFutureWithOutput, IoFutureWithOutputState};
+use crate::RequestHead;
 use futures::prelude::*;
 use std::io;
 use std::io::ErrorKind::InvalidData;
@@ -10,15 +11,19 @@ pub struct BufferDecodeState<O: 'static> {
     buffer: Vec<u8>,
     completion: usize,
     max_headers: usize,
-    decode_func: &'static dyn Fn(&[u8], usize) -> io::Result<O>,
-    _phantom: PhantomData<*const O>,
+    decode_func: &'static (dyn Fn(&[u8], usize) -> io::Result<O> + Sync),
+    _phantom: PhantomData<&'static O>,
 }
+
+#[allow(dead_code)]
+const fn check_if_send<T: Send>() {}
+const _: () = check_if_send::<BufferDecodeState<RequestHead>>();
 
 impl<O> BufferDecodeState<O> {
     pub fn new(
         max_buffer: usize,
         max_headers: usize,
-        decode_func: &'static dyn Fn(&[u8], usize) -> io::Result<O>,
+        decode_func: &'static (dyn Fn(&[u8], usize) -> io::Result<O> + Sync),
     ) -> Self {
         Self {
             buffer: Vec::with_capacity(max_buffer),
