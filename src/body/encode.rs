@@ -197,20 +197,25 @@ impl Chunked {
         cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<io::Result<usize>> {
-        if self.closing && buf.len() > 0 {
-            return err_kind(io::ErrorKind::InvalidData);
-        }
-        let mut n = 0;
-        if self.written == None {
-            n += self.append(buf);
-        }
-        match self.poll(&mut transport, cx) {
-            Poll::Pending => match n {
-                0 => Poll::Pending,
-                n => Poll::Ready(Ok(n)),
-            },
-            Poll::Ready(Err(err)) => Poll::Ready(Err(err)),
-            Poll::Ready(Ok(())) => Poll::Ready(Ok(n)),
+        loop {
+            if self.closing && buf.len() > 0 {
+                return err_kind(io::ErrorKind::InvalidData);
+            }
+            let mut n = 0;
+            if self.written == None {
+                n += self.append(buf);
+            }
+            return match self.poll(&mut transport, cx) {
+                Poll::Pending => match n {
+                    0 => Poll::Pending,
+                    n => Poll::Ready(Ok(n)),
+                },
+                Poll::Ready(Err(err)) => Poll::Ready(Err(err)),
+                Poll::Ready(Ok(())) => match n {
+                    0 => continue,
+                    n => Poll::Ready(Ok(n)),
+                },
+            };
         }
     }
     fn poll_flush<IO: AsyncWrite + Unpin>(
