@@ -1,13 +1,14 @@
 use async_http_codec::{BodyDecodeWithContinue, BodyEncode, RequestHead, ResponseHead};
 use async_web_server::TcpIncoming;
-use futures::executor::block_on;
 use futures::prelude::*;
 use http::header::{CONNECTION, CONTENT_LENGTH, TRANSFER_ENCODING};
 use http::{Method, Request, Response, StatusCode};
 use log::LevelFilter;
 use simple_logger::SimpleLogger;
+use smol::future::block_on;
+use smol::spawn;
 use std::convert::TryInto;
-use std::net::Ipv4Addr;
+use std::net::Ipv6Addr;
 
 const HTML: &[u8] = include_bytes!("echo-client.html");
 
@@ -17,13 +18,16 @@ fn main() -> anyhow::Result<()> {
         .init()
         .unwrap();
 
-    let mut incoming = TcpIncoming::bind((Ipv4Addr::UNSPECIFIED, 8080))?;
+    let mut incoming = TcpIncoming::bind((Ipv6Addr::UNSPECIFIED, 8080))?;
 
     block_on(async {
         while let Some(transport) = incoming.next().await {
-            if let Err(err) = handle(transport).await {
-                log::error!("error handling request: {:?}", err);
-            }
+            spawn(async {
+                if let Err(err) = handle(transport).await {
+                    log::error!("error handling request: {:?}", err);
+                }
+            })
+            .detach();
         }
         unreachable!()
     })
