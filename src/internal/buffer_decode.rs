@@ -41,6 +41,7 @@ impl<IO: AsyncRead + Unpin, O> IoFutureWithOutputState<IO, O> for BufferDecodeSt
                 return Poll::Ready(Err(io::Error::new(InvalidData, "head too long")));
             }
             match Pin::new(&mut *transport).poll_read(cx, chunk) {
+                Poll::Ready(Ok(0)) => return Poll::Ready(Err(io::ErrorKind::UnexpectedEof.into())),
                 Poll::Ready(Ok(n)) => {
                     let mut chunk = &chunk[0..n];
                     self.buffer.extend_from_slice(chunk);
