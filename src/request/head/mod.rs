@@ -21,6 +21,19 @@ pub struct RequestHead<'a> {
 }
 
 impl<'a> RequestHead<'a> {
+    pub fn new(
+        method: Method,
+        uri: Cow<'a, Uri>,
+        version: Version,
+        headers: Cow<'a, HeaderMap>,
+    ) -> Self {
+        Self {
+            method,
+            uri,
+            version,
+            headers,
+        }
+    }
     pub fn ref_parts(parts: &'a Parts) -> Self {
         Self {
             method: parts.method.clone(),
