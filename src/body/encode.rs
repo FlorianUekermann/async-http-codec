@@ -81,7 +81,7 @@ impl BodyEncodeState {
             state: self,
         }
     }
-    fn poll_write<IO: AsyncWrite + Unpin>(
+    pub fn poll_write<IO: AsyncWrite + Unpin>(
         &mut self,
         mut transport: IO,
         cx: &mut Context<'_>,
