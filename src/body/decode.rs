@@ -89,6 +89,12 @@ impl BodyDecodeState {
             state: self,
         }
     }
+    pub fn as_async_read<IO: AsyncRead + Unpin>(&mut self, transport: IO) -> BodyDecode<&mut Self, IO> {
+        BodyDecode {
+            transport,
+            state: self,
+        }
+    }
     pub fn poll_read<IO: AsyncRead + Unpin>(
         &mut self,
         transport: &mut IO,
