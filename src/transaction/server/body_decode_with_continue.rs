@@ -46,7 +46,13 @@ impl BodyDecodeWithContinueState {
     pub fn into_async_read<IO: AsyncRead + AsyncWrite + Unpin>(
         self,
         io: IO,
-    ) -> BodyDecodeWithContinue<IO> {
+    ) -> BodyDecodeWithContinue<Self, IO> {
+        BodyDecodeWithContinue { io, state: self }
+    }
+    pub fn as_async_read<IO: AsyncRead + AsyncWrite + Unpin>(
+        &mut self,
+        io: IO,
+    ) -> BodyDecodeWithContinue<&mut Self, IO> {
         BodyDecodeWithContinue { io, state: self }
     }
     pub fn poll_read<IO: AsyncRead + AsyncWrite + Unpin>(
@@ -75,12 +81,15 @@ impl BodyDecodeWithContinueState {
     }
 }
 
-pub struct BodyDecodeWithContinue<IO: AsyncRead + AsyncWrite + Unpin> {
+pub struct BodyDecodeWithContinue<
+    T: BorrowMut<BodyDecodeWithContinueState> + Unpin,
+    IO: AsyncRead + AsyncWrite + Unpin,
+> {
     io: IO,
-    state: BodyDecodeWithContinueState,
+    state: T,
 }
 
-impl<IO: AsyncRead + AsyncWrite + Unpin> BodyDecodeWithContinue<IO> {
+impl<IO: AsyncRead + AsyncWrite + Unpin> BodyDecodeWithContinue<BodyDecodeWithContinueState, IO> {
     pub fn from_head(head: &RequestHead, io: IO) -> anyhow::Result<Self> {
         Ok(BodyDecodeWithContinueState::from_head(head)?.into_async_read(io))
     }
@@ -94,19 +103,28 @@ impl<IO: AsyncRead + AsyncWrite + Unpin> BodyDecodeWithContinue<IO> {
     pub fn new(io: IO, version: Version, length: Option<u64>, send_continue: bool) -> Self {
         BodyDecodeWithContinueState::new(version, length, send_continue).into_async_read(io)
     }
-    pub fn checkpoint(self) -> (IO, BodyDecodeWithContinueState) {
-        (self.io, self.state)
+}
+
+impl<T: BorrowMut<BodyDecodeWithContinueState> + Unpin, IO: AsyncRead + AsyncWrite + Unpin>
+    BodyDecodeWithContinue<T, IO>
+{
+    pub fn into_inner(self) -> (T, IO) {
+        (self.state, self.io)
     }
 }
 
-impl<IO: AsyncRead + AsyncWrite + Unpin> AsyncRead for BodyDecodeWithContinue<IO> {
+impl<T: BorrowMut<BodyDecodeWithContinueState> + Unpin, IO: AsyncRead + AsyncWrite + Unpin>
+    AsyncRead for BodyDecodeWithContinue<T, IO>
+{
     fn poll_read(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &mut [u8],
     ) -> Poll<io::Result<usize>> {
         let this = self.get_mut();
-        this.state.poll_read(cx, buf, this.io.borrow_mut())
+        this.state
+            .borrow_mut()
+            .poll_read(cx, buf, this.io.borrow_mut())
     }
 }
 
