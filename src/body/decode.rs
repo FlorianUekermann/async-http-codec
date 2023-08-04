@@ -1,34 +1,40 @@
 use crate::body::common::length_from_headers;
 use futures::prelude::*;
+use std::borrow::BorrowMut;
 use std::io;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-pub struct BodyDecode<IO: AsyncRead + Unpin> {
+pub struct BodyDecode<T: BorrowMut<BodyDecodeState> + Unpin, IO: AsyncRead + Unpin> {
     transport: IO,
-    state: BodyDecodeState,
+    state: T,
 }
 
-impl<IO: AsyncRead + Unpin> BodyDecode<IO> {
-    pub fn from_headers(headers: &http::header::HeaderMap, transport: IO) -> anyhow::Result<Self> {
-        Ok(BodyDecodeState::from_headers(headers)?.into_async_read(transport))
-    }
+impl<IO: AsyncRead + Unpin> BodyDecode<BodyDecodeState, IO> {
     pub fn new(transport: IO, length: Option<u64>) -> Self {
         BodyDecodeState::new(length).into_async_read(transport)
     }
-    pub fn checkpoint(self) -> (IO, BodyDecodeState) {
-        (self.transport, self.state)
+    pub fn from_headers(headers: &http::header::HeaderMap, transport: IO) -> anyhow::Result<Self> {
+        Ok(BodyDecodeState::from_headers(headers)?.into_async_read(transport))
     }
 }
 
-impl<IO: AsyncRead + Unpin> AsyncRead for BodyDecode<IO> {
+impl<T: BorrowMut<BodyDecodeState> + Unpin, IO: AsyncRead + Unpin> BodyDecode<T, IO> {
+    pub fn into_inner(self) -> (T, IO) {
+        (self.state, self.transport)
+    }
+}
+
+impl<T: BorrowMut<BodyDecodeState> + Unpin, IO: AsyncRead + Unpin> AsyncRead for BodyDecode<T, IO> {
     fn poll_read(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &mut [u8],
     ) -> Poll<io::Result<usize>> {
         let this = self.get_mut();
-        this.state.poll_read(&mut this.transport, cx, buf)
+        this.state
+            .borrow_mut()
+            .poll_read(&mut this.transport, cx, buf)
     }
 }
 
@@ -77,7 +83,7 @@ impl BodyDecodeState {
             remaining,
         }
     }
-    pub fn into_async_read<IO: AsyncRead + Unpin>(self, transport: IO) -> BodyDecode<IO> {
+    pub fn into_async_read<IO: AsyncRead + Unpin>(self, transport: IO) -> BodyDecode<Self, IO> {
         BodyDecode {
             transport,
             state: self,
