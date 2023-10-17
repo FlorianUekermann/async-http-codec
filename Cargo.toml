@@ -4,6 +4,7 @@ version = "0.7.0"
 edition = "2021"
 description = "async HTTP 1.1 encoding and decoding"
 license = "Apache-2.0 OR MIT"
+repository = "https://github.com/FlorianUekermann/async-http-codec"
 
 [dependencies]
 http = "0.2.5"
