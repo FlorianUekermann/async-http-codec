@@ -1,12 +1,12 @@
 [package]
 name = "async-http-codec"
-version = "0.7.0"
+version = "0.8.0"
 edition = "2021"
 description = "async HTTP 1.1 encoding and decoding"
 license = "Apache-2.0 OR MIT"
 
 [dependencies]
-http = "0.2.5"
+http = "1.0.0"
 httparse = "1.7.1"
 futures = "0.3.21"
 anyhow = "1.0.44"
