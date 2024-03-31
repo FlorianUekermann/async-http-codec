@@ -1,6 +1,6 @@
+mod parse;
 #[cfg(test)]
 mod test;
-mod parse;
 
 use crate::internal::buffer_decode::{BufferDecode, BufferDecodeState};
 use crate::internal::buffer_write::{BufferWrite, BufferWriteState};
