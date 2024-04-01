@@ -39,6 +39,7 @@ fn test_request_head_parse() {
     let mut input = INPUT;
     let size = parser.read_data(&mut input).unwrap();
     println!("{}", size);
-    let head = parser.try_take_head().unwrap();
+    let part = parser.try_take_head().unwrap();
+    let head = RequestHead::from(part);
     block_on(check(&head));
 }

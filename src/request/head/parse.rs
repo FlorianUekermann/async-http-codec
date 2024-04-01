@@ -1,5 +1,5 @@
-use crate::RequestHead;
 use http::header::HeaderName;
+use http::request::Parts;
 use http::{HeaderValue, Method, Request, Uri, Version};
 use std::io;
 use std::io::ErrorKind::InvalidData;
@@ -79,7 +79,7 @@ impl<'a> RequestHeadParse<'a> {
 	}
         Ok(self.buffer.len())
     }
-    pub fn try_take_head(&mut self) -> io::Result<RequestHead> {
+    pub fn try_take_head(&mut self) -> io::Result<Parts> {
         let mut headers = vec![httparse::EMPTY_HEADER; self.max_headers];
         let mut parsed_request = httparse::Request::new(&mut headers);
         if parsed_request
@@ -113,6 +113,6 @@ impl<'a> RequestHeadParse<'a> {
                     .map_err(|_| io::Error::new(InvalidData, "invalid header value"))?,
             );
         }
-        Ok(RequestHead::from(request))
+        Ok(request.into_parts().0)
     }
 }
