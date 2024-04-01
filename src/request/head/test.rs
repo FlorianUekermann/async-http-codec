@@ -40,5 +40,5 @@ fn test_request_head_parse() {
     let size = parser.read_data(&mut input).unwrap();
     println!("{}", size);
     let head = parser.try_take_head().unwrap();
-    block_on( async {check(&head).await });
+    block_on(check(&head));
 }
