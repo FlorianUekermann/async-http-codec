@@ -3,6 +3,8 @@ use futures::executor::block_on;
 use futures::io::Cursor;
 use http::{Method, Version};
 
+use super::parse::RequestHeadParse;
+
 const INPUT: &[u8] = b"GET / HTTP/1.1\r\nhost: www.example.com\r\nconnection: close\r\n\r\n";
 
 async fn check(head: &RequestHead<'_>) {
@@ -29,4 +31,15 @@ fn test() {
             String::from_utf8(INPUT.to_vec())
         );
     })
+}
+
+#[test]
+fn test_request_head_parse() {
+    let mut parser = RequestHeadParse::new(8096, 10);
+    let mut input = INPUT;
+    let size = parser.read_data(&mut input).unwrap();
+    println!("{}", size);
+    let part = parser.try_take_head().unwrap();
+    let head = RequestHead::from(part);
+    block_on(check(&head));
 }
