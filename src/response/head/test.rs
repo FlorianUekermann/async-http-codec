@@ -1,4 +1,4 @@
-use crate::response::head::ResponseHead;
+use crate::response::head::{parse::ResponseHeadParse, ResponseHead};
 use futures::executor::block_on;
 use futures::io::Cursor;
 use http::{StatusCode, Version};
@@ -27,4 +27,15 @@ fn test() {
             String::from_utf8(INPUT.to_vec())
         );
     })
+}
+
+#[test]
+fn test_request_head_parse() {
+    let mut parser = ResponseHeadParse::new(8096, 10);
+    let mut input = INPUT;
+    let size = parser.read_data(&mut input).unwrap();
+    println!("{}", size);
+    let part = parser.try_take_head().unwrap();
+    let head = ResponseHead::from(part);
+    block_on(check(&head));
 }

@@ -1,19 +1,16 @@
-use http::request::Parts;
-use http::{Method, Request, Uri, Version};
-use std::io;
-use std::io::ErrorKind::InvalidData;
-use std::io::Read;
+use std::io::{self, ErrorKind::InvalidData, Read};
 
-use crate::internal::parse_helper::copy_parsed_headers;
-use crate::internal::terminator::TerminatorOverlap;
+use http::{response::Parts, Response, StatusCode, Version};
 
-pub struct RequestHeadParse<'a> {
+use crate::internal::{dec_helpers::copy_parsed_headers, terminator::TerminatorOverlap};
+
+pub struct ResponseHeadParse<'a> {
     buffer: Vec<u8>,
     terminator: TerminatorOverlap<'a>,
     max_headers: usize,
 }
 
-impl<'a> RequestHeadParse<'a> {
+impl<'a> ResponseHeadParse<'a> {
     const END: &'a [u8] = b"\r\n\r\n";
     pub fn new(max_buffer: usize, max_headers: usize) -> Self {
         Self {
@@ -37,30 +34,23 @@ impl<'a> RequestHeadParse<'a> {
     }
     pub fn try_take_head(&mut self) -> io::Result<Parts> {
         let mut headers = vec![httparse::EMPTY_HEADER; self.max_headers];
-        let mut parsed_request = httparse::Request::new(&mut headers);
-        if parsed_request
-            .parse(self.buffer.as_ref())
+        let mut parsed_response = httparse::Response::new(&mut headers);
+        if parsed_response
+            .parse(self.buffer.as_slice())
             .map_err(|err| io::Error::new(InvalidData, err.to_string()))?
             .is_partial()
         {
             return Err(io::Error::new(InvalidData, "malformed HTTP head"));
         }
-        if parsed_request.version != Some(1) {
+        if parsed_response.version != Some(1) {
             return Err(io::Error::new(InvalidData, "unsupported HTTP version"));
         }
-        let method = Method::from_bytes(parsed_request.method.unwrap_or("").as_bytes())
-            .map_err(|err| io::Error::new(InvalidData, err.to_string()))?;
-        let uri = parsed_request
-            .path
-            .unwrap_or("")
-            .parse::<Uri>()
-            .map_err(|_| io::Error::new(InvalidData, "invalid uri"))?;
-        let mut request = Request::new(());
-        *request.method_mut() = method;
-        *request.uri_mut() = uri;
-        *request.version_mut() = Version::HTTP_11;
-        let headers = request.headers_mut();
-        copy_parsed_headers(headers, parsed_request.headers)?;
-        Ok(request.into_parts().0)
+        let mut response = Response::new(());
+        *response.version_mut() = Version::HTTP_11;
+        *response.status_mut() = StatusCode::from_u16(parsed_response.code.unwrap())
+            .map_err(|_| io::Error::new(InvalidData, "invalid status code"))?;
+        let headers = response.headers_mut();
+        copy_parsed_headers(headers, parsed_response.headers)?;
+        Ok(response.into_parts().0)
     }
 }
