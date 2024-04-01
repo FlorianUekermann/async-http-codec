@@ -1,10 +1,10 @@
-use http::header::HeaderName;
 use http::request::Parts;
-use http::{HeaderValue, Method, Request, Uri, Version};
+use http::{Method, Request, Uri, Version};
 use std::io;
 use std::io::ErrorKind::InvalidData;
 use std::io::Read;
 
+use crate::internal::parse_helper::copy_parsed_headers;
 use crate::internal::terminator::TerminatorOverlap;
 
 pub struct RequestHeadParse<'a> {
@@ -60,15 +60,7 @@ impl<'a> RequestHeadParse<'a> {
         *request.uri_mut() = uri;
         *request.version_mut() = Version::HTTP_11;
         let headers = request.headers_mut();
-        headers.reserve(parsed_request.headers.len());
-        for header in parsed_request.headers {
-            headers.append(
-                HeaderName::from_bytes(header.name.as_bytes())
-                    .map_err(|_| io::Error::new(InvalidData, "invalid header name"))?,
-                HeaderValue::from_bytes(header.value)
-                    .map_err(|_| io::Error::new(InvalidData, "invalid header value"))?,
-            );
-        }
+        copy_parsed_headers(headers, parsed_request.headers)?;
         Ok(request.into_parts().0)
     }
 }
