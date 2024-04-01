@@ -1,9 +1,7 @@
-use std::borrow::Cow;
-
 use crate::request::head::RequestHead;
 use futures::executor::block_on;
 use futures::io::Cursor;
-use http::{Method, Version, Uri, HeaderMap};
+use http::{Method, Version};
 
 use super::parse::RequestHeadParse;
 
@@ -37,15 +35,10 @@ fn test() {
 
 #[test]
 fn test_request_head_parse() {
-    let req_head = block_on( async {RequestHead::decode(INPUT).await.unwrap().1});
-    let mut req_head_parse = RequestHeadParse::new(8096,req_head.headers.len());
-
-    let _ = req_head_parse.read_data(&mut req_head.to_vec().unwrap().as_slice());
-    let req_header_recv = req_head_parse.try_take_head().unwrap();
-
-    assert_eq!(req_head.method, req_header_recv.method);
-    assert_eq!(req_head.uri, req_header_recv.uri);
-    assert_eq!(req_head.version, req_header_recv.version);
-    assert_eq!(req_head.headers, req_header_recv.headers);
-
+    let mut parser = RequestHeadParse::new(8096, 10);
+    let mut input = INPUT;
+    let size = parser.read_data(&mut input).unwrap();
+    println!("{}", size);
+    let head = parser.try_take_head().unwrap();
+    block_on( async {check(&head).await });
 }
