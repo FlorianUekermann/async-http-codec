@@ -6,20 +6,20 @@ use std::io::ErrorKind::InvalidData;
 use std::io::Read;
 
 struct TerminatorOverlap<'a> {
-    terminator: &'a[u8],
-    overlap: usize
+    terminator: &'a [u8],
+    overlap: usize,
 }
 
 impl<'a> TerminatorOverlap<'a> {
-    fn new(terminator: &'a[u8]) -> TerminatorOverlap {
-	TerminatorOverlap {
-	    terminator,
-	    overlap: 0
-	}
+    fn new(terminator: &'a [u8]) -> TerminatorOverlap {
+        TerminatorOverlap {
+            terminator,
+            overlap: 0,
+        }
     }
     /// returns min number of unprocessed bytes (remaining unmatched terminator bytes)
     fn remaining(&self) -> usize {
-	self.terminator.len() - self.overlap
+        self.terminator.len() - self.overlap
     }
     /// scans data for overlap with remaining terminator bytes
     fn process(&mut self, data: &[u8]) {
@@ -31,23 +31,21 @@ impl<'a> TerminatorOverlap<'a> {
                         self.overlap = window_size;
                     }
                 }
-            },
-            x => {
-                match data[0..(self.terminator.len() - x)] == self.terminator[x..] {
-                    true => self.overlap = self.terminator.len(),
-                    false => self.overlap = 0,
-                }
             }
+            x => match data[0..(self.terminator.len() - x)] == self.terminator[x..] {
+                true => self.overlap = self.terminator.len(),
+                false => self.overlap = 0,
+            },
         }
     }
     /// true if complete terminator was processed
     fn done(&self) -> bool {
-	self.overlap == self.terminator.len()
+        self.overlap == self.terminator.len()
     }
     /// slice read buffer to maximum size guaranteed to not read past the terminator
     fn max_read_buf(&self, buf: &'a mut [u8]) -> &'a mut [u8] {
-	let len = buf.len();
-	&mut buf[0..len.min(self.remaining())]
+        let len = buf.len();
+        &mut buf[0..len.min(self.remaining())]
     }
 }
 
@@ -68,15 +66,15 @@ impl<'a> RequestHeadParse<'a> {
     }
     pub fn read_data<T: Read>(&mut self, rd: &mut T) -> Result<usize, std::io::Error> {
         let mut chunks = [0u8; Self::END.len()];
-	while !self.terminator.done() {
-	    let chunks = self.terminator.max_read_buf(&mut chunks);
-	    if self.buffer.capacity() - self.buffer.len() < chunks.len() {
-		return Err(std::io::ErrorKind::OutOfMemory.into());
-	    }
-	    rd.read_exact(chunks)?;
-	    self.terminator.process(&chunks);
-	    self.buffer.extend_from_slice(chunks);
-	}
+        while !self.terminator.done() {
+            let chunks = self.terminator.max_read_buf(&mut chunks);
+            if self.buffer.capacity() - self.buffer.len() < chunks.len() {
+                return Err(std::io::ErrorKind::OutOfMemory.into());
+            }
+            rd.read_exact(chunks)?;
+            self.terminator.process(&chunks);
+            self.buffer.extend_from_slice(chunks);
+        }
         Ok(self.buffer.len())
     }
     pub fn try_take_head(&mut self) -> io::Result<Parts> {
