@@ -1,6 +1,7 @@
 pub(crate) mod common;
 mod decode;
 mod encode;
+mod parse;
 
 pub use decode::*;
 pub use encode::*;
