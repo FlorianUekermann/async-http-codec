@@ -49,48 +49,57 @@ world! hello world!bla.\r\n\
 \r\n";
     const DECODED_ONE_LINE: &str = "hello ";
     const DECODED_TWO_LINES: &str = "hello world! hello world!";
-    const DECODED_THREE_LINES: &str  = "hello world! hello world!world! hello world!bla.";
+    const DECODED_THREE_LINES: &str = "hello world! hello world!world! hello world!bla.";
     const DECODED: &[u8] = b"hello world! hello world!";
     const CHUNKED_PARTS: [&[u8]; 2] = [b"hello ", b"world! hello world!"];
 
     #[test]
     fn body_parse_chunked_decode_length_1() {
-	let mut parser = BodyParseChunked::new();
-	let mut out = [0u8;10];
-	let mut bytes_read = 0;
-	let mut rd = BufReader::new(CHUNKED_ONE_LINE);
+        let mut parser = BodyParseChunked::new();
+        let mut out = [0u8; 10];
+        let mut bytes_read = 0;
+        let mut rd = BufReader::new(CHUNKED_ONE_LINE);
 
-	while !parser.is_finished() {
-	    let next_bytes = parser.process_data(&mut rd,&mut out).unwrap();
-	    assert_eq!(&out[0..next_bytes], DECODED_ONE_LINE[bytes_read..bytes_read+next_bytes].as_bytes());
-	    bytes_read += next_bytes;
-	}
+        while !parser.is_finished() {
+            let next_bytes = parser.process_data(&mut rd, &mut out).unwrap();
+            assert_eq!(
+                &out[0..next_bytes],
+                DECODED_ONE_LINE[bytes_read..bytes_read + next_bytes].as_bytes()
+            );
+            bytes_read += next_bytes;
+        }
     }
     #[test]
     fn body_parse_chunked_decode_length_2() {
-	let mut parser = BodyParseChunked::new();
-	let mut out = [0u8;10];
-	let mut bytes_read = 0;
-	let mut rd = BufReader::new(CHUNKED_TWO_LINES);
+        let mut parser = BodyParseChunked::new();
+        let mut out = [0u8; 10];
+        let mut bytes_read = 0;
+        let mut rd = BufReader::new(CHUNKED_TWO_LINES);
 
-	while !parser.is_finished() {
-	    let next_bytes = parser.process_data(&mut rd,&mut out).unwrap();
-	    assert_eq!(&out[0..next_bytes], DECODED_TWO_LINES[bytes_read..bytes_read+next_bytes].as_bytes());
-	    bytes_read += next_bytes;
-	}
+        while !parser.is_finished() {
+            let next_bytes = parser.process_data(&mut rd, &mut out).unwrap();
+            assert_eq!(
+                &out[0..next_bytes],
+                DECODED_TWO_LINES[bytes_read..bytes_read + next_bytes].as_bytes()
+            );
+            bytes_read += next_bytes;
+        }
     }
     #[test]
     fn body_parse_chunked_decode_length_3() {
-	let mut parser = BodyParseChunked::new();
-	let mut out = [0u8;10];
-	let mut bytes_read = 0;
-	let mut rd = BufReader::new(CHUNKED_THREE_LINES);
+        let mut parser = BodyParseChunked::new();
+        let mut out = [0u8; 10];
+        let mut bytes_read = 0;
+        let mut rd = BufReader::new(CHUNKED_THREE_LINES);
 
-	while !parser.is_finished() {
-	    let next_bytes = parser.process_data(&mut rd,&mut out).unwrap();
-	    assert_eq!(&out[0..next_bytes], DECODED_THREE_LINES[bytes_read..bytes_read+next_bytes].as_bytes());
-	    bytes_read += next_bytes;
-	}
+        while !parser.is_finished() {
+            let next_bytes = parser.process_data(&mut rd, &mut out).unwrap();
+            assert_eq!(
+                &out[0..next_bytes],
+                DECODED_THREE_LINES[bytes_read..bytes_read + next_bytes].as_bytes()
+            );
+            bytes_read += next_bytes;
+        }
     }
     #[test]
     fn decode_chunked() {
