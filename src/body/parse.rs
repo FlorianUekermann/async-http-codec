@@ -45,10 +45,9 @@ impl BodyParseChunked {
                     let mut iter = read_until_term[0..n_read].into_iter();
 
                     while let Some(&byte) = iter.next() {
-                        match (byte as char, self.state) {
+                        match (byte, self.state) {
                             (
-                                '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '0' | 'A'
-                                | 'B' | 'C' | 'D' | 'E' | 'F',
+				b'0'..=b'9' | b'A'..=b'F',
                                 ParseState::ReadMetaInfo(MetaInfoKind::ContentLength),
                             ) if self.overlap == 0 => {
                                 self.n =
@@ -58,7 +57,7 @@ impl BodyParseChunked {
                                 }
                             }
                             (
-                                '\r',
+                                b'\r',
                                 ParseState::ReadMetaInfo(
                                     MetaInfoKind::HeaderCRLF
                                     | MetaInfoKind::FinalCRLF
@@ -73,7 +72,7 @@ impl BodyParseChunked {
                                 }
                                 self.overlap = 1;
                             }
-                            ('\n', ParseState::ReadMetaInfo(MetaInfoKind::HeaderCRLF))
+                            (b'\n', ParseState::ReadMetaInfo(MetaInfoKind::HeaderCRLF))
                                 if self.overlap == 1 =>
                             {
                                 self.overlap = 0;
@@ -83,13 +82,13 @@ impl BodyParseChunked {
                                     self.state = ParseState::CopyContent;
                                 }
                             }
-                            ('\n', ParseState::ReadMetaInfo(MetaInfoKind::ContentCRLF))
+                            (b'\n', ParseState::ReadMetaInfo(MetaInfoKind::ContentCRLF))
                                 if self.overlap == 1 =>
                             {
                                 self.overlap = 0;
                                 self.state = ParseState::ReadMetaInfo(MetaInfoKind::ContentLength);
                             }
-                            ('\n', ParseState::ReadMetaInfo(MetaInfoKind::FinalCRLF))
+                            (b'\n', ParseState::ReadMetaInfo(MetaInfoKind::FinalCRLF))
                                 if self.overlap == 1 =>
                             {
                                 self.overlap = 0;
