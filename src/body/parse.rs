@@ -169,7 +169,7 @@ impl BodyParseChunked {
                 terminator: TerminatorRead::NoneRead,
                 n: _,
                 state: ParseState::CopyContent,
-            } => 4.min(self.n),
+            } => self.n,
             _ => 1,
         }
     }
