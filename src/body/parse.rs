@@ -83,15 +83,18 @@ impl BodyParseChunked {
                                 (b'\n', TerminatorRead::CRRead) => {
                                     self.terminator = TerminatorRead::NoneRead;
 
-                                    if meta_info == MetaInfoKind::FinalCRLF {
-                                        self.state = ParseState::Done;
-                                        continue;
-                                    }
-
-                                    if meta_info == MetaInfoKind::ContentCRLF {
-                                        self.state =
-                                            ParseState::ReadMetaInfo(MetaInfoKind::ContentLength);
-                                        continue;
+                                    match meta_info {
+                                        MetaInfoKind::FinalCRLF => {
+                                            self.state = ParseState::Done;
+                                            continue;
+                                        }
+                                        MetaInfoKind::ContentCRLF => {
+                                            self.state = ParseState::ReadMetaInfo(
+                                                MetaInfoKind::ContentLength,
+                                            );
+                                            continue;
+                                        }
+                                        _ => {}
                                     }
 
                                     if self.n == 0 {

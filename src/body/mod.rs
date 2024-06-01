@@ -46,15 +46,17 @@ world! hello world!\r\n\
 world! hello world!bla.\r\n\
 0\r\n\
 \r\n";
-    const CHUNKED_ARRAY: [&[u8];3] = [CHUNKED_ONE_LINE, CHUNKED_TWO_LINES, CHUNKED_THREE_LINES];
+    const CHUNKED_ARRAY: [&[u8]; 3] = [CHUNKED_ONE_LINE, CHUNKED_TWO_LINES, CHUNKED_THREE_LINES];
     const DECODED_ONE_LINE: &str = "hello ";
     const DECODED_TWO_LINES: &str = "hello world! hello world!";
     const DECODED_THREE_LINES: &str = "hello world! hello world!world! hello world!bla.";
-    const DECODED_ARRAY: [&str;3] = [DECODED_ONE_LINE, DECODED_TWO_LINES, DECODED_THREE_LINES];
+    const DECODED_ARRAY: [&str; 3] = [DECODED_ONE_LINE, DECODED_TWO_LINES, DECODED_THREE_LINES];
     const DECODED: &[u8] = b"hello world! hello world!";
     const CHUNKED_PARTS: [&[u8]; 2] = [b"hello ", b"world! hello world!"];
 
-    fn body_parse_chunked_decode_length<const READ_LENGTH: usize, const OUT_LENGTH: usize>(array_index: usize) {
+    fn body_parse_chunked_decode_length<const READ_LENGTH: usize, const OUT_LENGTH: usize>(
+        array_index: usize,
+    ) {
         let mut parser = BodyParseChunked::new();
         let mut out = [0; OUT_LENGTH];
         let mut bytes_read = 0;
@@ -71,12 +73,12 @@ world! hello world!bla.\r\n\
     }
     #[test]
     fn body_parse_chunked_decode() {
-	for i in 0..3 {
-	    body_parse_chunked_decode_length::<3,5>(i);
-	    body_parse_chunked_decode_length::<3,10>(i);
-	    body_parse_chunked_decode_length::<100,5>(i);
-	    body_parse_chunked_decode_length::<100,100>(i);
-	}
+        for i in 0..3 {
+            body_parse_chunked_decode_length::<3, 5>(i);
+            body_parse_chunked_decode_length::<3, 10>(i);
+            body_parse_chunked_decode_length::<100, 5>(i);
+            body_parse_chunked_decode_length::<100, 100>(i);
+        }
     }
     #[test]
     fn decode_chunked() {
