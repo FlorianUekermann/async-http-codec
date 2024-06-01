@@ -53,9 +53,10 @@ impl BodyParseChunked {
                     }
                     let mut iter = read_until_term[0..n_read].into_iter();
 
-                    while let (Some(&byte), ParseState::ReadMetaInfo(x)) = (iter.next(), self.state)
+                    while let (Some(&byte), ParseState::ReadMetaInfo(meta_info)) =
+                        (iter.next(), self.state)
                     {
-                        match x {
+                        match meta_info {
                             MetaInfoKind::ContentLength => match (byte, self.terminator) {
                                 (b'0'..=b'9' | b'A'..=b'F', TerminatorRead::NoneRead) => {
                                     self.n =
@@ -71,9 +72,9 @@ impl BodyParseChunked {
                                 }
                                 _ => {
                                     return Err(std::io::Error::new(
-					    std::io::ErrorKind::InvalidData,
-					    format!("Unexpected character while reading CRLF, last byte {}, self: {:?}", byte, self),
-					));
+					std::io::ErrorKind::InvalidData,
+					format!("Unexpected character while reading CRLF, last byte {}, self: {:?}", byte, self),
+				    ));
                                 }
                             },
                             MetaInfoKind::HeaderCRLF
@@ -82,12 +83,12 @@ impl BodyParseChunked {
                                 (b'\n', TerminatorRead::CRRead) => {
                                     self.terminator = TerminatorRead::NoneRead;
 
-                                    if x == MetaInfoKind::FinalCRLF {
+                                    if meta_info == MetaInfoKind::FinalCRLF {
                                         self.state = ParseState::Done;
                                         continue;
                                     }
 
-                                    if x == MetaInfoKind::ContentCRLF {
+                                    if meta_info == MetaInfoKind::ContentCRLF {
                                         self.state =
                                             ParseState::ReadMetaInfo(MetaInfoKind::ContentLength);
                                         continue;
@@ -111,7 +112,7 @@ impl BodyParseChunked {
                                 }
                             },
                         }
-		    }
+                    }
                 }
                 ParseState::CopyContent => {
                     let next_bytes_to_out =
@@ -120,21 +121,15 @@ impl BodyParseChunked {
                     if next_bytes_to_out == 0 && self.n > 0 {
                         return Ok(bytes_written_to_out);
                     }
-		    
+
                     let bytes_written = rd.read(
                         &mut out[bytes_written_to_out
-			..(bytes_written_to_out + next_bytes_to_out as usize)],
+                            ..(bytes_written_to_out + next_bytes_to_out as usize)],
                     )?;
                     self.n -= bytes_written;
                     bytes_written_to_out += bytes_written;
 
-                    if bytes_written_to_out >= out.len() {
-                        if bytes_written_to_out > out.len() {
-                            return Err(std::io::Error::new(
-                                std::io::ErrorKind::InvalidData,
-                                "Unexpected character in Content-Length Header",
-                            ));
-                        }
+                    if bytes_written_to_out == out.len() {
                         return Ok(bytes_written_to_out);
                     }
 
